@@ -116,18 +116,28 @@
     <h2>설정 · Cài đặt <small id="ver" style="color:var(--mute);font-weight:400;font-size:12px"></small></h2>
     <label>Anthropic API 키 (sk-ant-…)</label>
     <input type="password" id="apiKey" autocomplete="off" placeholder="sk-ant-api03-…">
-    <label>모델</label>
-    <select id="model">
-      <option value="claude-haiku-5-5">claude-haiku-5-5 (빠름·저렴, 권장)</option>
-      <option value="claude-sonnet-5-5">claude-sonnet-5-5 (더 정확, 조금 느림)</option>
-      <option value="custom">직접 입력…</option>
+    <label>번역 품질 (Claude) — 모델과 생각 깊이</label>
+    <select id="quality">
+      <option value="fast">빠름 — Haiku 5.5 · 생각 끔</option>
+      <option value="balanced">균형 — Haiku 5.5 · 생각 보통</option>
+      <option value="high">높음 — Sonnet 5.5 · 생각 보통 (권장)</option>
+      <option value="max">최고 — Opus 5.5 · 생각 높음 (느릴 수 있음)</option>
+      <option value="custom">직접 설정 — 아래 모델 사용</option>
     </select>
-    <input type="text" id="modelCustom" placeholder="모델 ID 직접 입력" style="display:none;margin-top:6px">
-    <label>번역 품질 (Claude) — 모델이 답하기 전에 생각하는 정도</label>
-    <select id="think">
-      <option value="off">빠름 — 생각 끔 (가장 빠름)</option>
-      <option value="medium">균형 — 생각 켬 · 보통 (권장)</option>
-      <option value="high">최고 — 생각 켬 · 높음 (조금 느림)</option>
+    <div id="modelRow" style="display:none">
+      <label>모델 (직접 설정)</label>
+      <select id="model">
+        <option value="claude-haiku-5-5">claude-haiku-5-5</option>
+        <option value="claude-sonnet-5-5">claude-sonnet-5-5</option>
+        <option value="custom">직접 입력…</option>
+      </select>
+      <input type="text" id="modelCustom" placeholder="모델 ID 직접 입력" style="display:none;margin-top:6px">
+    </div>
+    <label>베트남어 지역 어휘</label>
+    <select id="dialect">
+      <option value="auto">자동 — 상대가 쓰는 말 따라가기 (권장)</option>
+      <option value="north">북부 선호 (mẹ · bố · không)</option>
+      <option value="south">남부 선호 (má · ba · hông)</option>
     </select>
     <label>번역 엔진</label>
     <select id="engine">
@@ -146,6 +156,8 @@
     <textarea id="names" placeholder="봉, 봉아, 봉화 = Bông"></textarea>
     <label>말투 메모 (선택) — 호칭·관계</label>
     <input type="text" id="persona" placeholder="예: 여자친구에겐 anh/em, 아이들에겐 chú/con">
+    <label>가족 맥락 메모 (선택) — 인물·호칭·둘만의 표현·자주 나오는 주제<br><small>번역 참고용. 이 폰 브라우저에만 저장되며 서버·저장소에는 올라가지 않아요.</small></label>
+    <textarea id="family" placeholder="예: 여자친구 봉(Bông), 딸 보이(Bối)·수아(Sữa). 나→봉 anh/em, '자기야'=em yêu. 둘만의 장난: …"></textarea>
     <label>아이들 사진 — 위쪽 배너의 동그란 액자에 표시<br><small>이 폰 브라우저에만 저장됩니다. 서버나 저장소에는 올라가지 않아요.</small></label>
     <div class="btns" style="margin-top:4px"><button type="button" class="close" id="photoPick">📷 사진 고르기</button><button type="button" class="close" id="photoClear">지우기</button></div>
     <input type="file" id="photoFile" accept="image/*" style="display:none">
@@ -176,12 +188,12 @@
 <script>
 (() => {
   const $ = id => document.getElementById(id);
-  const APP_VER = 'v9';
+  const APP_VER = 'v10';
   const LS = 'kvtalk.cfg.v1';
-  const DEFAULT_NAMES = '봉, 봉아, 봉이, 봉화 = Bông\n보이, 보이야, 보위 = Bối\n수아, 수아야, 수화, 수야 = Sữa';
+  const DEFAULT_NAMES = '봉, 봉아, 봉이, 봉화 = Bông\n보이, 보이야, 보위 = Bối\n수아, 수아야, 수화, 수야 = Sữa\n미아, 마야 = Mya';
   const cfg = Object.assign({ apiKey:'', model:'claude-haiku-5-5', engine:'claude', gemKey:'', gemModel:'gemini-2.5-flash', primary:'claude',
                               autoAlt:true, tts:true, ttsKo:true, rate:0.95, flip:true, persona:'', names:DEFAULT_NAMES, noise:'normal',
-                              photoMode:'bg', photoOp:0.65, think:'medium' },
+                              photoMode:'bg', photoOp:0.65, quality:'high', dialect:'auto', family:'' },
     (()=>{ try{ return JSON.parse(localStorage.getItem(LS)||'{}'); }catch(e){ return {}; } })());
   const history = [];   // {from:'ko'|'vi', src, dst}
   let lastErr = null;   // {heard, raw}
@@ -250,8 +262,9 @@
     $('modelCustom').style.display = $('model').value === 'custom' ? 'block' : 'none';
     $('modelCustom').value = known.includes(cfg.model) ? '' : cfg.model;
     $('engine').value = cfg.engine; $('gemKey').value = cfg.gemKey; $('gemModel').value = cfg.gemModel; $('primary').value = cfg.primary;
-    $('think').value = cfg.think;
-    $('names').value = cfg.names; $('persona').value = cfg.persona;
+    $('quality').value = cfg.quality; $('dialect').value = cfg.dialect;
+    $('modelRow').style.display = cfg.quality === 'custom' ? 'block' : 'none';
+    $('names').value = cfg.names; $('persona').value = cfg.persona; $('family').value = cfg.family;
     $('autoAlt').checked = cfg.autoAlt; $('noise').value = cfg.noise; $('tts').checked = cfg.tts; $('ttsKo').checked = cfg.ttsKo;
     $('rate').value = String(cfg.rate); $('flip').checked = cfg.flip;
     $('photoMode').value = cfg.photoMode; $('photoOp').value = String(cfg.photoOp);
@@ -262,14 +275,15 @@
     $('cfg').classList.add('show');
   }
   $('model').onchange = () => $('modelCustom').style.display = $('model').value === 'custom' ? 'block' : 'none';
+  $('quality').onchange = () => $('modelRow').style.display = $('quality').value === 'custom' ? 'block' : 'none';
   $('cfgBtn').onclick = openCfg; $('nokeyBtn').onclick = openCfg;
   $('cfgClose').onclick = () => $('cfg').classList.remove('show');
   $('cfgSave').onclick = () => {
     cfg.apiKey = $('apiKey').value.trim();
     cfg.model = $('model').value === 'custom' ? ($('modelCustom').value.trim() || 'claude-haiku-5-5') : $('model').value;
     cfg.engine = $('engine').value; cfg.gemKey = $('gemKey').value.trim(); cfg.gemModel = $('gemModel').value.trim() || 'gemini-2.5-flash'; cfg.primary = $('primary').value;
-    cfg.think = $('think').value;
-    cfg.names = $('names').value.trim(); cfg.persona = $('persona').value.trim();
+    cfg.quality = $('quality').value; cfg.dialect = $('dialect').value;
+    cfg.names = $('names').value.trim(); cfg.persona = $('persona').value.trim(); cfg.family = $('family').value.trim();
     cfg.autoAlt = $('autoAlt').checked; cfg.noise = $('noise').value; cfg.tts = $('tts').checked; cfg.ttsKo = $('ttsKo').checked;
     cfg.rate = parseFloat($('rate').value) || 0.95; cfg.flip = $('flip').checked;
     cfg.photoMode = $('photoMode').value; cfg.photoOp = parseFloat($('photoOp').value) || 0.65;
@@ -370,8 +384,8 @@
     stopListening();
     const my = ++session;
     const r = new SR();
-    r.lang = el[lang].srLang; r.interimResults = true; r.continuous = false; r.maxAlternatives = 1;
-    let finalText = '', interim = '', lastResultAt = 0;
+    r.lang = el[lang].srLang; r.interimResults = true; r.continuous = false; r.maxAlternatives = 3;
+    let finalText = '', interim = '', lastResultAt = 0; const alts = [];
     r.onstart = () => {
       if (my !== session) return;
       listening = lang; rec = r;
@@ -384,7 +398,10 @@
       interim = ''; lastResultAt = performance.now();
       for (let i = e.resultIndex; i < e.results.length; i++){
         const t = e.results[i][0].transcript;
-        if (e.results[i].isFinal) finalText += t; else interim += t;
+        if (e.results[i].isFinal){
+          finalText += t;
+          for (let k = 1; k < e.results[i].length; k++){ const a = (e.results[i][k].transcript || '').trim(); if (a && a !== t.trim() && !alts.includes(a)) alts.push(a); }
+        } else interim += t;
       }
       el[lang].mine.textContent = (finalText + ' ' + interim).trim();
     };
@@ -402,7 +419,7 @@
       const text = (finalText || interim).trim();
       const recDelay = lastResultAt ? (performance.now() - lastResultAt) / 1000 : 0;
       stopListening();
-      if (text) handleUtterance(lang, text, recDelay);
+      if (text) handleUtterance(lang, text, recDelay, alts.slice(0, 2));
       else { setStatus(lang === 'ko' ? '인식된 말이 없어요' : 'Không nhận được lời nói'); advance(lang, 'fail'); }
     };
     try{ r.start(); }
@@ -426,9 +443,21 @@ Pet names depend on who is speaking:
 - Partner → Korean man: "anh yêu" → "자기야"; "anh ơi/chồng ơi" → "여보" or "자기야".
 - Korean man → the girls: "얘들아" → "các con ơi". Girls → him: "chú ơi" → "삼촌" (or "아저씨").`;
   }
+  // Personal context lives only in this browser (cfg.family), never in the public source.
+  function familyBlock(){
+    const f = String(cfg.family || '').trim();
+    return f ? `\nFamily context from the user (people, address terms, inside jokes, recurring topics — use it to resolve references and keep names/terms consistent; keep it out of the translation unless actually said):\n${f}` : '';
+  }
+  function dialectBlock(){
+    if (cfg.dialect === 'north') return '\nVietnamese word choice: prefer Northern forms (mẹ, bố, không) when there is a choice, but relationship and context come first.';
+    if (cfg.dialect === 'south') return '\nVietnamese word choice: prefer Southern forms (má, ba, hông) when there is a choice, but relationship and context come first.';
+    return '\nVietnamese word choice: her own messages use standard forms (mẹ, không) and polite dạ/ạ. Keep standard forms and follow whatever she actually uses; do not switch to regional variants (má/ba/hông) on your own.';
+  }
   function systemPrompt(){
-    return `You are a live interpreter between a Korean man and his Vietnamese partner and her two young daughters (about 5–10 years old). They talk casually at home or on video calls.
+    return `You are a live interpreter between a Korean man and his Vietnamese partner and her two young daughters. They talk casually at home or on video calls. Your job: make each side sound like a warm, natural native speaker — preserve tone (affection, teasing, worry, urgency), keep it short and spoken, never add explanations.
 ${cfg.persona ? 'Relationship / address terms note from the user: ' + cfg.persona : ''}
+${familyBlock()}
+${dialectBlock()}
 ${namesBlock()}
 
 Rules:
@@ -441,6 +470,17 @@ Rules:
 - "t" must NEVER be empty unless noise is true. If the utterance is only a name or a call, translate it as a natural call ("Sữa ơi!" / "수아야!"). If unsure, give the most likely translation in "t" and a ≤10-word note in the SPEAKER's language in "note"; otherwise note is "".
 - "noise": true ONLY if the text is clearly not part of this conversation — e.g. TV/radio audio, a third party's unrelated talk, or meaningless fragments with no plausible meaning. Short children's fragments, names, greetings and one-word answers are NOT noise.${cfg.noise === 'high' ? ' Be strict: anything that does not fit the recent conversation is noise.' : ''}
 - "lang_ok": false if the text does not plausibly read as the indicated source language (it looks like the OTHER language mis-recognised), else true.
+- Pronouns/address terms must stay consistent with who is speaking to whom (see Family context). Keep numbers, times, prices and dates exact.
+- When alternative recognitions are given, pick the reading that best fits the conversation; they are hints, not extra content.
+
+Examples (input → exact JSON output):
+<input>[Korean man → partner] 자기야 밥 먹었어?</input>
+<output>{"t":"Em yêu, ăn cơm chưa?","note":"","noise":false,"lang_ok":true}</output>
+<input>[partner → Korean man] anh ơi em nhớ anh nhiều lắm</input>
+<output>{"t":"자기야, 많이 보고 싶어.","note":"","noise":false,"lang_ok":true}</output>
+<input>[Korean man → girls, recognised as "수화 사탕 먹을래"] 수화 사탕 먹을래</input>
+<output>{"t":"Sữa ơi, con ăn kẹo không?","note":"'수화'를 수아로 이해함","noise":false,"lang_ok":true}</output>
+
 - Respond with ONLY a JSON object: {"t":"<translation>","note":"<note or empty>","noise":false,"lang_ok":true}`;
   }
   function hasKey(){
@@ -448,10 +488,33 @@ Rules:
     if (cfg.engine === 'gemini') return !!cfg.gemKey;
     return !!cfg.apiKey && !!cfg.gemKey;
   }
-  function userPrompt(lang, text){
+  function userPrompt(lang, text, alts){
     const to = other(lang);
     const ctx = history.slice(-8).map(h => `${h.from==='ko'?'[KO speaker]':'[VI speaker]'} ${h.src} ⇒ ${h.dst}`).join('\n');
-    return `Recent conversation (oldest first):\n${ctx || '(none)'}\n\nNEW UTTERANCE in ${lang==='ko'?'Korean':'Vietnamese'} → translate to ${to==='ko'?'Korean':'Vietnamese'}:\n${text}`;
+    const who = lang === 'ko' ? 'Korean man speaking' : 'Vietnamese side speaking (partner or one of the girls)';
+    const altLine = (alts && alts.length) ? `\nAlternative recognitions of the same speech: ${alts.join(' | ')}` : '';
+    return `Recent conversation (oldest first):\n${ctx || '(none)'}\n\nNEW UTTERANCE in ${lang==='ko'?'Korean':'Vietnamese'} (${who}) → translate to ${to==='ko'?'Korean':'Vietnamese'}:\n${text}${altLine}`;
+  }
+  const OUT_SCHEMA = { type:'json_schema', schema:{ type:'object',
+    properties:{ t:{type:'string'}, note:{type:'string'}, noise:{type:'boolean'}, lang_ok:{type:'boolean'} },
+    required:['t','note','noise','lang_ok'], additionalProperties:false } };
+  // Quality preset → model, thinking depth, token budget.
+  function resolveQuality(){
+    const q = cfg.quality || 'high';
+    if (q === 'fast') return { model:'claude-haiku-5-5', think:'off', max:1024 };
+    if (q === 'balanced') return { model:'claude-haiku-5-5', think:'medium', max:4096 };
+    if (q === 'max') return { model:'claude-opus-5-5', think:'high', max:16384 };
+    if (q === 'custom') return { model: cfg.model || 'claude-sonnet-5-5', think:'medium', max:8192 };
+    return { model:'claude-sonnet-5-5', think:'medium', max:8192 };
+  }
+  // Thinking fields differ per model family: Haiku can disable thinking, Sonnet 5.5 uses between_tools, Opus can only lower effort.
+  function thinkFields(model, think){
+    if (think === 'off'){
+      if (/^claude-haiku/.test(model)) return { thinking:{ type:'disabled' }, effort:'low' };
+      if (/^claude-sonnet-5-5/.test(model)) return { thinking:{ type:'between_tools' }, effort:'low' };
+      return { thinking:{ type:'adaptive' }, effort:'low' };
+    }
+    return { thinking:{ type:'adaptive' }, effort: think === 'high' ? 'high' : 'medium' };
   }
   // Returns {t, note, noise, langOk, raw}. Never throws; the caller validates.
   function parseJson(raw){
@@ -463,14 +526,14 @@ Rules:
     if (/^[\[{]/.test(clean)) return { t:'', note:'', noise:false, langOk:true, raw, truncated:true };
     return { t: clean.replace(/^["']|["']$/g,'').trim(), note:'', noise:false, langOk:true, raw };
   }
-  async function translateGemini(lang, text){
+  async function translateGemini(lang, text, alts){
     if (!cfg.gemKey) throw new Error('Gemini API 키 없음');
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(cfg.gemModel)}:generateContent?key=${encodeURIComponent(cfg.gemKey)}`;
     const resp = await fetch(url, {
       method:'POST', headers:{ 'content-type':'application/json' },
       body: JSON.stringify({
         systemInstruction:{ parts:[{ text: systemPrompt() }] },
-        contents:[{ role:'user', parts:[{ text: userPrompt(lang, text) }] }],
+        contents:[{ role:'user', parts:[{ text: userPrompt(lang, text, alts) }] }],
         generationConfig:{ temperature:0.3, maxOutputTokens:300, responseMimeType:'application/json' }
       })
     });
@@ -489,15 +552,15 @@ Rules:
     if (!raw) out.stop = cand.finishReason || 'no content';
     return out;
   }
-  // One Claude request. opts.think = 'off' | 'medium' | 'high' controls thinking/effort (thinking tokens count
-  // toward max_tokens, so budgets are generous); if the chosen model rejects those fields (400) the call is
-  // repeated without them (opts.plain).
-  async function claudeCall(lang, text, opts){
-    const body = { model: cfg.model, max_tokens: opts.maxTokens, system: systemPrompt(), messages:[{role:'user', content:userPrompt(lang, text)}] };
-    if (!opts.plain){
-      if (opts.think === 'off'){ body.thinking = { type:'disabled' }; body.output_config = { effort:'low' }; }
-      else { body.thinking = { type:'adaptive' }; body.output_config = { effort: opts.think === 'high' ? 'high' : 'medium' }; }
-    }
+  // One Claude request. Thinking tokens count toward max_tokens, so budgets are generous. Structured output
+  // (OUT_SCHEMA) guarantees well-formed JSON. If the model rejects a field (400), only that field group is
+  // dropped and the call is repeated: noFormat (schema) or noThink (thinking/effort).
+  async function claudeCall(lang, text, alts, opts){
+    const body = { model: opts.model, max_tokens: opts.maxTokens, system: systemPrompt(), messages:[{role:'user', content:userPrompt(lang, text, alts)}] };
+    const oc = {};
+    if (!opts.noThink){ const f = thinkFields(opts.model, opts.think); body.thinking = f.thinking; oc.effort = f.effort; }
+    if (!opts.noFormat) oc.format = OUT_SCHEMA;
+    if (Object.keys(oc).length) body.output_config = oc;
     const resp = await fetch('https://api.anthropic.com/v1/messages', {
       method:'POST',
       headers:{ 'content-type':'application/json', 'x-api-key':cfg.apiKey, 'anthropic-version':'2023-06-01', 'anthropic-dangerous-direct-browser-access':'true' },
@@ -506,7 +569,8 @@ Rules:
     if (!resp.ok){
       let msg = 'HTTP ' + resp.status;
       try{ const j = await resp.json(); msg = (j.error && j.error.message) || msg; }catch(e){}
-      if (resp.status === 400 && !opts.plain && /thinking|effort|output_config/i.test(msg)) return claudeCall(lang, text, Object.assign({}, opts, { plain:true }));
+      if (resp.status === 400 && !opts.noFormat && /format|schema/i.test(msg)) return claudeCall(lang, text, alts, Object.assign({}, opts, { noFormat:true }));
+      if (resp.status === 400 && !opts.noThink && /thinking|effort|output_config/i.test(msg)) return claudeCall(lang, text, alts, Object.assign({}, opts, { noThink:true }));
       if (resp.status === 401) msg = 'API 키가 잘못되었습니다 (401)';
       if (resp.status === 404) msg = '모델 ID를 찾을 수 없습니다. 설정에서 모델을 바꿔보세요';
       if (resp.status === 429) msg = '요청 한도 초과(429). 잠시 후 다시';
@@ -519,16 +583,15 @@ Rules:
     out.stop = data.stop_reason || '';
     // Diagnostics for the settings error log: which call shape was used and how many tokens came back.
     const u = data.usage || {};
-    out.raw = (raw ? raw.slice(0, 160) + ' ' : '[본문 없음] ') + `⟨${APP_VER} think=${opts.plain ? 'plain' : opts.think} max=${opts.maxTokens} stop=${out.stop} out_tokens=${u.output_tokens == null ? '?' : u.output_tokens} blocks=${(data.content||[]).map(c=>c.type).join('/') || '-'}⟩`;
+    out.raw = (raw ? raw.slice(0, 160) + ' ' : '[본문 없음] ') + `⟨${APP_VER} ${opts.model} think=${opts.noThink ? 'plain' : opts.think} fmt=${opts.noFormat ? 'off' : 'schema'} max=${opts.maxTokens} stop=${out.stop} out_tokens=${u.output_tokens == null ? '?' : u.output_tokens} blocks=${(data.content||[]).map(c=>c.type).join('/') || '-'}⟩`;
     return out;
   }
-  async function translateClaude(lang, text){
+  async function translateClaude(lang, text, alts){
     if (!cfg.apiKey) throw new Error('Anthropic API 키 없음');
-    const think = cfg.think || 'medium';
-    const budget = think === 'off' ? 1024 : think === 'high' ? 8192 : 4096;
-    let out = await claudeCall(lang, text, { maxTokens: budget, think });
+    const q = resolveQuality();
+    let out = await claudeCall(lang, text, alts, { model: q.model, maxTokens: q.max, think: q.think });
     // Thinking tokens can consume the whole budget and leave no text: retry once with double the budget.
-    if (!out.t && !out.noise && (out.stop === 'max_tokens' || out.truncated)) out = await claudeCall(lang, text, { maxTokens: budget * 2, think });
+    if (!out.t && !out.noise && (out.stop === 'max_tokens' || out.truncated)) out = await claudeCall(lang, text, alts, { model: q.model, maxTokens: q.max * 2, think: q.think });
     return out;
   }
   // Validate one engine result; throws a readable error when unusable.
@@ -544,10 +607,10 @@ Rules:
     return r;
   }
   // Returns {t, note, noise, langOk, raw, alt?, mainLabel?}
-  async function translate(lang, text){
-    if (cfg.engine === 'claude') return check(await translateClaude(lang, text));
-    if (cfg.engine === 'gemini') return check(await translateGemini(lang, text));
-    const [c, g] = await Promise.allSettled([translateClaude(lang, text), translateGemini(lang, text)]);
+  async function translate(lang, text, alts){
+    if (cfg.engine === 'claude') return check(await translateClaude(lang, text, alts));
+    if (cfg.engine === 'gemini') return check(await translateGemini(lang, text, alts));
+    const [c, g] = await Promise.allSettled([translateClaude(lang, text, alts), translateGemini(lang, text, alts)]);
     const pick = r => { if (r.status !== 'fulfilled') return { t:'', err:r.reason && r.reason.message }; try{ return check(r.value); }catch(e){ return { t:'', err:e.message, raw:r.value.raw }; } };
     const R = { claude: pick(c), gemini: pick(g) };
     let mainName = cfg.primary, secName = cfg.primary === 'gemini' ? 'claude' : 'gemini';
@@ -559,7 +622,7 @@ Rules:
     return Object.assign({}, M, { mainLabel: cap(mainName), alt: cap(secName) + (sec.t ? ': ' + sec.t : ' ⚠ ' + (sec.err||'오류')) });
   }
 
-  async function handleUtterance(lang, rawText, recDelay){
+  async function handleUtterance(lang, rawText, recDelay, alts){
     if (busy) return;
     const to = other(lang);
     const now = performance.now();
@@ -577,7 +640,7 @@ Rules:
     const t0 = performance.now();
     let r;
     try{
-      r = await translate(lang, text);
+      r = await translate(lang, text, alts || []);
     }catch(e){
       busy = false; unbusy(lang, to);
       lastErr = { heard: text, raw: String(e.raw || e.message || '').slice(0, 200) };
