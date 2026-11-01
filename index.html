@@ -28,6 +28,11 @@
   .side .alt{font-size:14px;color:var(--mute);line-height:1.35;border-top:1px dashed var(--line);padding-top:4px;margin-top:2px}
   .side .alt:empty{display:none}
   .side .theirs.dim{opacity:.55;font-weight:500}
+  .kids{display:flex;align-items:center;gap:10px;margin:6px 0 2px;padding:6px 10px;border-radius:18px;background:linear-gradient(135deg,rgba(255,255,255,.12),rgba(255,255,255,.04));border:1.5px dashed rgba(255,209,102,.6);flex-shrink:0}
+  .kids .ph{width:48px;height:48px;border-radius:50%;object-fit:cover;border:2px solid #ffd166;background:#2a2a31;flex:none;display:flex;align-items:center;justify-content:center;font-size:24px;line-height:1}
+  .kids .tx{min-width:0;line-height:1.25}
+  .kids .tx b{display:block;font-size:15px;color:#ffe08a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .kids .tx small{font-size:11px;color:var(--mute)}
   .talk{height:64px;border-radius:16px;border:2px solid transparent;font-size:19px;font-weight:800;color:#fff;display:flex;align-items:center;justify-content:center;gap:10px;user-select:none;flex-shrink:0}
   .ko .talk{background:var(--ko)} .vi .talk{background:var(--vi)}
   .talk.listening{animation:pulse 1.1s ease-in-out infinite;border-color:#fff}
@@ -67,10 +72,11 @@
   <!-- Vietnamese side (top, can be flipped to face the other person) -->
   <section class="side vi flip" id="sideVi">
     <div class="top"><span class="lbl v">🇻🇳 Tiếng Việt</span><span id="stVi"></span></div>
+    <div class="kids"><img class="ph" id="kidsImg" alt="" hidden><span class="ph" id="kidsEmo">👧🧒</span><div class="tx"><b>⭐ Máy dịch của Bối &amp; Sữa 🌸</b><small>보이 &amp; 수아의 통역기</small></div></div>
     <div class="mine" id="mineVi"></div>
     <div class="alt" id="altVi"></div>
     <div class="theirs dim" id="theirsVi">Bấm nút bên dưới rồi nói. Nói xong sẽ tự dịch sang tiếng Hàn.</div>
-    <button class="talk" id="btnVi"><span class="dot"></span><span class="t">Bấm để nói</span></button>
+    <button class="talk" id="btnVi"><span class="dot"></span><span class="t">🎤 Bấm rồi nói nhé!</span></button>
   </section>
 
   <div id="bar">
@@ -124,6 +130,9 @@
     <textarea id="names" placeholder="봉, 봉아, 봉화 = Bông"></textarea>
     <label>말투 메모 (선택) — 호칭·관계</label>
     <input type="text" id="persona" placeholder="예: 여자친구에겐 anh/em, 아이들에겐 chú/con">
+    <label>아이들 사진 — 위쪽 배너의 동그란 액자에 표시<br><small>이 폰 브라우저에만 저장됩니다. 서버나 저장소에는 올라가지 않아요.</small></label>
+    <div class="btns" style="margin-top:4px"><button type="button" class="close" id="photoPick">📷 사진 고르기</button><button type="button" class="close" id="photoClear">지우기</button></div>
+    <input type="file" id="photoFile" accept="image/*" style="display:none">
 
     <div class="row"><span>🔁 자동 대화 모드<br><small style="color:var(--mute)">한 번 누르면 번갈아 듣기·번역을 계속합니다</small></span><input type="checkbox" id="autoAlt" checked></div>
     <label>잡음 필터 — 대화와 무관한 소리(TV·옆사람)를 번역하지 않음</label>
@@ -162,7 +171,7 @@
 
   const el = {
     ko:{ side:$('sideKo'), btn:$('btnKo'), mine:$('mineKo'), theirs:$('theirsKo'), alt:$('altKo'), st:$('stKo'), label:'눌러서 말하기', listen:'듣는 중… 말하세요', srLang:'ko-KR', again:'다시 말씀해 주세요', skipped:'무시됨' },
-    vi:{ side:$('sideVi'), btn:$('btnVi'), mine:$('mineVi'), theirs:$('theirsVi'), alt:$('altVi'), st:$('stVi'), label:'Bấm để nói', listen:'Đang nghe… hãy nói', srLang:'vi-VN', again:'Nói lại nhé', skipped:'Bỏ qua' },
+    vi:{ side:$('sideVi'), btn:$('btnVi'), mine:$('mineVi'), theirs:$('theirsVi'), alt:$('altVi'), st:$('stVi'), label:'🎤 Bấm rồi nói nhé!', listen:'Đang nghe… hãy nói', srLang:'vi-VN', again:'Nói lại nhé', skipped:'Bỏ qua' },
   };
   const other = l => l === 'ko' ? 'vi' : 'ko';
   const setStatus = (t, resumeLang) => {
@@ -234,6 +243,31 @@
     save(); applyCfg(); $('cfg').classList.remove('show'); setStatus('저장됨');
   };
   $('flipBtn').onclick = () => { cfg.flip = !cfg.flip; save(); applyCfg(); };
+
+  // ---------- kids photo (stored only in this browser) ----------
+  const PHOTO = 'kvtalk.photo.v1';
+  function applyPhoto(){
+    let d = null; try{ d = localStorage.getItem(PHOTO); }catch(e){}
+    const img = $('kidsImg'), emo = $('kidsEmo');
+    if (d){ img.src = d; img.hidden = false; emo.hidden = true; } else { img.removeAttribute('src'); img.hidden = true; emo.hidden = false; }
+  }
+  $('photoPick').onclick = () => $('photoFile').click();
+  $('photoClear').onclick = () => { try{ localStorage.removeItem(PHOTO); }catch(e){} applyPhoto(); setStatus('사진 지움'); };
+  $('photoFile').onchange = () => {
+    const f = $('photoFile').files && $('photoFile').files[0]; if (!f) return;
+    const url = URL.createObjectURL(f); const im = new Image();
+    im.onload = () => {
+      const S = 256, c = document.createElement('canvas'); c.width = c.height = S;
+      const s = Math.min(im.width, im.height), sx = (im.width - s) / 2, sy = (im.height - s) * 0.35;
+      c.getContext('2d').drawImage(im, sx, sy, s, s, 0, 0, S, S);
+      URL.revokeObjectURL(url);
+      try{ localStorage.setItem(PHOTO, c.toDataURL('image/jpeg', 0.85)); setStatus('사진 저장됨'); }catch(e){ setStatus('사진 저장 실패(저장 공간 부족)'); }
+      applyPhoto(); $('photoFile').value = '';
+    };
+    im.onerror = () => { URL.revokeObjectURL(url); setStatus('사진을 읽지 못했어요'); };
+    im.src = url;
+  };
+  applyPhoto();
   $('autoBtn').onclick = () => { cfg.autoAlt = !cfg.autoAlt; save(); applyCfg(); setStatus(cfg.autoAlt ? '자동 대화: 한쪽 버튼을 눌러 시작' : '자동 대화 끔'); if (!cfg.autoAlt) fails = 0; };
   applyCfg();
 
