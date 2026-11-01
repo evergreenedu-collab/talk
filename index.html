@@ -124,6 +124,12 @@
       <option value="custom">직접 입력…</option>
     </select>
     <input type="text" id="modelCustom" placeholder="모델 ID 직접 입력" style="display:none;margin-top:6px">
+    <label>번역 품질 (Claude) — 모델이 답하기 전에 생각하는 정도</label>
+    <select id="think">
+      <option value="off">빠름 — 생각 끔 (가장 빠름)</option>
+      <option value="medium">균형 — 생각 켬 · 보통 (권장)</option>
+      <option value="high">최고 — 생각 켬 · 높음 (조금 느림)</option>
+    </select>
     <label>번역 엔진</label>
     <select id="engine">
       <option value="claude">Claude만</option>
@@ -171,12 +177,12 @@
 <script>
 (() => {
   const $ = id => document.getElementById(id);
-  const APP_VER = 'v6';
+  const APP_VER = 'v7';
   const LS = 'kvtalk.cfg.v1';
   const DEFAULT_NAMES = '봉, 봉아, 봉이, 봉화 = Bông\n보이, 보이야, 보위 = Bối\n수아, 수아야, 수화, 수야 = Sữa';
   const cfg = Object.assign({ apiKey:'', model:'claude-haiku-5-5', engine:'claude', gemKey:'', gemModel:'gemini-2.5-flash', primary:'claude',
                               autoAlt:true, tts:true, ttsKo:true, rate:0.95, flip:true, persona:'', names:DEFAULT_NAMES, noise:'normal',
-                              photoMode:'bg', photoOp:0.65 },
+                              photoMode:'bg', photoOp:0.65, think:'medium' },
     (()=>{ try{ return JSON.parse(localStorage.getItem(LS)||'{}'); }catch(e){ return {}; } })());
   const history = [];   // {from:'ko'|'vi', src, dst}
   let lastErr = null;   // {heard, raw}
@@ -245,6 +251,7 @@
     $('modelCustom').style.display = $('model').value === 'custom' ? 'block' : 'none';
     $('modelCustom').value = known.includes(cfg.model) ? '' : cfg.model;
     $('engine').value = cfg.engine; $('gemKey').value = cfg.gemKey; $('gemModel').value = cfg.gemModel; $('primary').value = cfg.primary;
+    $('think').value = cfg.think;
     $('names').value = cfg.names; $('persona').value = cfg.persona;
     $('autoAlt').checked = cfg.autoAlt; $('noise').value = cfg.noise; $('tts').checked = cfg.tts; $('ttsKo').checked = cfg.ttsKo;
     $('rate').value = String(cfg.rate); $('flip').checked = cfg.flip;
@@ -262,6 +269,7 @@
     cfg.apiKey = $('apiKey').value.trim();
     cfg.model = $('model').value === 'custom' ? ($('modelCustom').value.trim() || 'claude-haiku-5-5') : $('model').value;
     cfg.engine = $('engine').value; cfg.gemKey = $('gemKey').value.trim(); cfg.gemModel = $('gemModel').value.trim() || 'gemini-2.5-flash'; cfg.primary = $('primary').value;
+    cfg.think = $('think').value;
     cfg.names = $('names').value.trim(); cfg.persona = $('persona').value.trim();
     cfg.autoAlt = $('autoAlt').checked; cfg.noise = $('noise').value; cfg.tts = $('tts').checked; cfg.ttsKo = $('ttsKo').checked;
     cfg.rate = parseFloat($('rate').value) || 0.95; cfg.flip = $('flip').checked;
@@ -478,11 +486,15 @@ Rules:
     if (!raw) out.stop = cand.finishReason || 'no content';
     return out;
   }
-  // One Claude request. opts.fast adds thinking-off + low effort (fast, no thinking tokens eating max_tokens);
-  // if the chosen model rejects those fields (400) the call is repeated without them.
+  // One Claude request. opts.think = 'off' | 'medium' | 'high' controls thinking/effort (thinking tokens count
+  // toward max_tokens, so budgets are generous); if the chosen model rejects those fields (400) the call is
+  // repeated without them (opts.plain).
   async function claudeCall(lang, text, opts){
     const body = { model: cfg.model, max_tokens: opts.maxTokens, system: systemPrompt(), messages:[{role:'user', content:userPrompt(lang, text)}] };
-    if (opts.fast){ body.thinking = { type:'disabled' }; body.output_config = { effort:'low' }; }
+    if (!opts.plain){
+      if (opts.think === 'off'){ body.thinking = { type:'disabled' }; body.output_config = { effort:'low' }; }
+      else { body.thinking = { type:'adaptive' }; body.output_config = { effort: opts.think === 'high' ? 'high' : 'medium' }; }
+    }
     const resp = await fetch('https://api.anthropic.com/v1/messages', {
       method:'POST',
       headers:{ 'content-type':'application/json', 'x-api-key':cfg.apiKey, 'anthropic-version':'2023-06-01', 'anthropic-dangerous-direct-browser-access':'true' },
@@ -491,7 +503,7 @@ Rules:
     if (!resp.ok){
       let msg = 'HTTP ' + resp.status;
       try{ const j = await resp.json(); msg = (j.error && j.error.message) || msg; }catch(e){}
-      if (resp.status === 400 && opts.fast && /thinking|effort|output_config/i.test(msg)) return claudeCall(lang, text, Object.assign({}, opts, { fast:false }));
+      if (resp.status === 400 && !opts.plain && /thinking|effort|output_config/i.test(msg)) return claudeCall(lang, text, Object.assign({}, opts, { plain:true }));
       if (resp.status === 401) msg = 'API 키가 잘못되었습니다 (401)';
       if (resp.status === 404) msg = '모델 ID를 찾을 수 없습니다. 설정에서 모델을 바꿔보세요';
       if (resp.status === 429) msg = '요청 한도 초과(429). 잠시 후 다시';
@@ -504,14 +516,16 @@ Rules:
     out.stop = data.stop_reason || '';
     // Diagnostics for the settings error log: which call shape was used and how many tokens came back.
     const u = data.usage || {};
-    out.raw = (raw ? raw.slice(0, 160) + ' ' : '[본문 없음] ') + `⟨${APP_VER} ${opts.fast ? 'fast' : 'std'} max=${opts.maxTokens} stop=${out.stop} out_tokens=${u.output_tokens == null ? '?' : u.output_tokens} blocks=${(data.content||[]).map(c=>c.type).join('/') || '-'}⟩`;
+    out.raw = (raw ? raw.slice(0, 160) + ' ' : '[본문 없음] ') + `⟨${APP_VER} think=${opts.plain ? 'plain' : opts.think} max=${opts.maxTokens} stop=${out.stop} out_tokens=${u.output_tokens == null ? '?' : u.output_tokens} blocks=${(data.content||[]).map(c=>c.type).join('/') || '-'}⟩`;
     return out;
   }
   async function translateClaude(lang, text){
     if (!cfg.apiKey) throw new Error('Anthropic API 키 없음');
-    let out = await claudeCall(lang, text, { maxTokens: 1024, fast: true });
-    // Thinking tokens can consume the whole budget and leave no text: retry once with a bigger budget.
-    if (!out.t && !out.noise && (out.stop === 'max_tokens' || out.truncated)) out = await claudeCall(lang, text, { maxTokens: 4096, fast: true });
+    const think = cfg.think || 'medium';
+    const budget = think === 'off' ? 1024 : think === 'high' ? 8192 : 4096;
+    let out = await claudeCall(lang, text, { maxTokens: budget, think });
+    // Thinking tokens can consume the whole budget and leave no text: retry once with double the budget.
+    if (!out.t && !out.noise && (out.stop === 'max_tokens' || out.truncated)) out = await claudeCall(lang, text, { maxTokens: budget * 2, think });
     return out;
   }
   // Validate one engine result; throws a readable error when unusable.
