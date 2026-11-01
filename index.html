@@ -114,7 +114,7 @@
 
 <div id="cfg">
   <div class="sheet">
-    <h2>설정 · Cài đặt</h2>
+    <h2>설정 · Cài đặt <small id="ver" style="color:var(--mute);font-weight:400;font-size:12px"></small></h2>
     <label>Anthropic API 키 (sk-ant-…)</label>
     <input type="password" id="apiKey" autocomplete="off" placeholder="sk-ant-api03-…">
     <label>모델</label>
@@ -171,6 +171,7 @@
 <script>
 (() => {
   const $ = id => document.getElementById(id);
+  const APP_VER = 'v6';
   const LS = 'kvtalk.cfg.v1';
   const DEFAULT_NAMES = '봉, 봉아, 봉이, 봉화 = Bông\n보이, 보이야, 보위 = Bối\n수아, 수아야, 수화, 수야 = Sữa';
   const cfg = Object.assign({ apiKey:'', model:'claude-haiku-5-5', engine:'claude', gemKey:'', gemModel:'gemini-2.5-flash', primary:'claude',
@@ -501,6 +502,9 @@ Rules:
     const raw = (data.content || []).filter(c => c.type === 'text').map(c => c.text || '').join('').trim();
     const out = parseJson(raw);
     out.stop = data.stop_reason || '';
+    // Diagnostics for the settings error log: which call shape was used and how many tokens came back.
+    const u = data.usage || {};
+    out.raw = (raw ? raw.slice(0, 160) + ' ' : '[본문 없음] ') + `⟨${APP_VER} ${opts.fast ? 'fast' : 'std'} max=${opts.maxTokens} stop=${out.stop} out_tokens=${u.output_tokens == null ? '?' : u.output_tokens} blocks=${(data.content||[]).map(c=>c.type).join('/') || '-'}⟩`;
     return out;
   }
   async function translateClaude(lang, text){
@@ -602,7 +606,9 @@ Rules:
   function markSkip(lang, text, why){ el[lang].mine.textContent = `(${el[lang].skipped}: ${why}) ${text}`; el[lang].mine.classList.add('skip'); }
 
   const esc = s => String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+  $('ver').textContent = APP_VER;
   if (!SR) setStatus('음성인식 미지원 브라우저 — 안드로이드 Chrome 또는 iPhone Safari로 열어주세요');
+  else setStatus('준비됨 · ' + APP_VER);
 })();
 </script>
 </body>
