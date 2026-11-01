@@ -176,7 +176,7 @@
 <script>
 (() => {
   const $ = id => document.getElementById(id);
-  const APP_VER = 'v8';
+  const APP_VER = 'v9';
   const LS = 'kvtalk.cfg.v1';
   const DEFAULT_NAMES = '봉, 봉아, 봉이, 봉화 = Bông\n보이, 보이야, 보위 = Bối\n수아, 수아야, 수화, 수야 = Sữa';
   const cfg = Object.assign({ apiKey:'', model:'claude-haiku-5-5', engine:'claude', gemKey:'', gemModel:'gemini-2.5-flash', primary:'claude',
@@ -420,7 +420,11 @@
 Name dictionary (family members). Speech recognition often turns these names into similar-sounding ordinary words.
 ${rows}
 - KO→VI: if one of the Korean forms appears where a person is being addressed or referred to, render it as the Vietnamese name (e.g. "수아야" → "Sữa ơi"). If the word is clearly an ordinary word in context (not a person), translate normally.
-- VI→KO: render the Vietnamese name with its Korean canonical form (e.g. Bông → 봉, as "봉아" when addressing).`;
+- VI→KO: render the Vietnamese name with its Korean canonical form (e.g. Bông → 봉, as "봉아" when addressing).
+Pet names depend on who is speaking:
+- Korean man → partner: "자기야/자기" → "em yêu" (lighter: "em ơi"); "여보" → "em yêu" or "vợ ơi".
+- Partner → Korean man: "anh yêu" → "자기야"; "anh ơi/chồng ơi" → "여보" or "자기야".
+- Korean man → the girls: "얘들아" → "các con ơi". Girls → him: "chú ơi" → "삼촌" (or "아저씨").`;
   }
   function systemPrompt(){
     return `You are a live interpreter between a Korean man and his Vietnamese partner and her two young daughters (about 5–10 years old). They talk casually at home or on video calls.
