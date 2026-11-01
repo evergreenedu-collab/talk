@@ -177,6 +177,15 @@
     <select id="rate"><option value="0.95">보통</option><option value="1.1">조금 빠르게</option><option value="1.25">빠르게</option></select>
     <div class="row"><span>위쪽(베트남어) 화면 180° 뒤집기<br><small style="color:var(--mute)">마주 보고 쓸 때 켬</small></span><input type="checkbox" id="flip" checked></div>
 
+    <label>다른 기기로 설정 옮기기 (PC → 폰)<br><small>이름 사전·메모·품질 옵션을 QR이나 코드로 옮깁니다. 사진은 제외(각 기기에서 선택).</small></label>
+    <div class="row"><span>API 키도 포함<br><small style="color:var(--mute)">켜면 QR/코드에 키가 들어가요. 내 기기끼리만, 메신저로 보내지 마세요.</small></span><input type="checkbox" id="xferKey"></div>
+    <div class="btns" style="margin-top:6px"><button type="button" class="close" id="xferQr">📱 QR 만들기</button><button type="button" class="close" id="xferCopy">📋 코드 복사</button></div>
+    <div id="qrBox" style="display:none;background:#fff;padding:10px;border-radius:12px;margin:10px auto 0;width:fit-content"></div>
+    <div class="warn" id="xferMsg"></div>
+    <label>코드로 가져오기 (폰에서 붙여넣기)</label>
+    <textarea id="xferIn" placeholder="PC에서 복사한 설정 코드를 붙여넣고 [적용]을 누르세요"></textarea>
+    <div class="btns" style="margin-top:4px"><button type="button" class="close" id="xferApply">적용</button></div>
+
     <label>최근 대화 기록 · 마지막 오류</label>
     <div class="hist" id="hist">(없음)</div>
     <div class="warn" id="ttsInfo"></div>
@@ -188,7 +197,7 @@
 <script>
 (() => {
   const $ = id => document.getElementById(id);
-  const APP_VER = 'v10';
+  const APP_VER = 'v11';
   const LS = 'kvtalk.cfg.v1';
   const DEFAULT_NAMES = '봉, 봉아, 봉이, 봉화 = Bông\n보이, 보이야, 보위 = Bối\n수아, 수아야, 수화, 수야 = Sữa\n미아, 마야 = Mya';
   const cfg = Object.assign({ apiKey:'', model:'claude-haiku-5-5', engine:'claude', gemKey:'', gemModel:'gemini-2.5-flash', primary:'claude',
@@ -686,6 +695,88 @@ Examples (input → exact JSON output):
   function markSkip(lang, text, why){ el[lang].mine.textContent = `(${el[lang].skipped}: ${why}) ${text}`; el[lang].mine.classList.add('skip'); }
 
   const esc = s => String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+  // ---------- settings transfer (PC → phone) via QR / code, no server ----------
+  const XFER_TEXT = { model:4000, gemModel:200, names:20000, persona:4000, family:20000 };
+  const XFER_ENUM = { engine:['claude','gemini','both'], primary:['claude','gemini'], quality:['fast','balanced','high','max','custom'], dialect:['auto','north','south'], noise:['off','normal','high'], photoMode:['bg','frame','off'] };
+  const XFER_BOOL = ['autoAlt','tts','ttsKo','flip'];
+  const XFER_NUM = { rate:[0.5,2], photoOp:[0.2,1] };
+  const XFER_KEYS = { apiKey:400, gemKey:400 };
+  const b64u = {
+    enc: bytes => { let s = ''; for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000)); return btoa(s).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,''); },
+    dec: str => { const s = atob(str.replace(/-/g,'+').replace(/_/g,'/') + '==='.slice((str.length + 3) % 4)); const b = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) b[i] = s.charCodeAt(i); return b; }
+  };
+  async function packSettings(includeKey){
+    const out = {};
+    for (const k in XFER_TEXT) if (typeof cfg[k] === 'string') out[k] = cfg[k].slice(0, XFER_TEXT[k]);
+    for (const k in XFER_ENUM) if (XFER_ENUM[k].includes(cfg[k])) out[k] = cfg[k];
+    for (const k of XFER_BOOL) out[k] = !!cfg[k];
+    for (const k in XFER_NUM) if (typeof cfg[k] === 'number') out[k] = cfg[k];
+    if (includeKey) for (const k in XFER_KEYS) if (cfg[k]) out[k] = cfg[k].slice(0, XFER_KEYS[k]);
+    const bytes = new TextEncoder().encode(JSON.stringify({ v:1, cfg: out }));
+    if (window.CompressionStream){
+      try{ const buf = await new Response(new Blob([bytes]).stream().pipeThrough(new CompressionStream('deflate-raw'))).arrayBuffer(); return 'z.' + b64u.enc(new Uint8Array(buf)); }catch(e){}
+    }
+    return 'j.' + b64u.enc(bytes);
+  }
+  async function unpackSettings(code){
+    code = String(code || '').trim();
+    const m = code.match(/^([zj])\.([A-Za-z0-9_-]+)$/); if (!m) throw new Error('코드 형식이 아니에요');
+    let bytes = b64u.dec(m[2]);
+    if (m[1] === 'z'){
+      if (!window.DecompressionStream) throw new Error('이 브라우저는 압축 코드를 못 읽어요 (최신 Chrome 사용)');
+      bytes = new Uint8Array(await new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).arrayBuffer());
+    }
+    const j = JSON.parse(new TextDecoder().decode(bytes));
+    if (!j || j.v !== 1 || !j.cfg || typeof j.cfg !== 'object') throw new Error('지원하지 않는 코드예요');
+    const c = j.cfg, out = {};
+    for (const k in XFER_TEXT) if (typeof c[k] === 'string') out[k] = c[k].slice(0, XFER_TEXT[k]);
+    for (const k in XFER_ENUM) if (XFER_ENUM[k].includes(c[k])) out[k] = c[k];
+    for (const k of XFER_BOOL) if (typeof c[k] === 'boolean') out[k] = c[k];
+    for (const k in XFER_NUM){ const n = Number(c[k]); if (Number.isFinite(n) && n >= XFER_NUM[k][0] && n <= XFER_NUM[k][1]) out[k] = n; }
+    for (const k in XFER_KEYS) if (typeof c[k] === 'string' && c[k]) out[k] = c[k].slice(0, XFER_KEYS[k]);
+    return out;
+  }
+  function applyImported(out){
+    for (const k of Object.keys(out)) cfg[k] = out[k];   // whitelisted keys only; photo & history untouched
+    save(); applyCfg(); applyPhoto();
+  }
+  async function importCode(code, fromLink){
+    try{
+      const out = await unpackSettings(code);
+      const hasKey = !!(out.apiKey || out.gemKey);
+      if (!confirm(`${fromLink ? 'PC에서 만든' : '붙여넣은'} 설정을 이 기기에 적용할까요?${hasKey ? ' (API 키 포함)' : ''}`)) { setStatus('가져오기 취소'); return; }
+      applyImported(out); setStatus('설정 가져옴 ✔'); if ($('cfg').classList.contains('show')) openCfg();
+    }catch(e){ setStatus('가져오기 실패: ' + e.message); }
+  }
+  function xferConfirmKey(){ return !$('xferKey').checked || confirm('API 키를 포함합니다. 이 QR/코드를 다른 사람에게 보내거나 캡처를 공유하지 마세요. 계속할까요?'); }
+  $('xferCopy').onclick = async () => {
+    if (!xferConfirmKey()) return;
+    const code = await packSettings($('xferKey').checked);
+    let ok = false; try{ await navigator.clipboard.writeText(code); ok = true; }catch(e){}
+    if (!ok){ $('xferIn').value = code; $('xferIn').select(); try{ ok = document.execCommand('copy'); }catch(e){} }
+    $('xferMsg').textContent = ok ? `코드를 복사했어요 (${code.length}자). 폰의 설정 → "코드로 가져오기"에 붙여넣으세요.` : '복사하지 못했어요. 아래 칸의 코드를 직접 복사하세요.';
+  };
+  $('xferQr').onclick = async () => {
+    if (!xferConfirmKey()) return;
+    const code = await packSettings($('xferKey').checked);
+    const url = location.origin + location.pathname + '#import=' + code;
+    const box = $('qrBox'); box.innerHTML = ''; box.style.display = 'block'; $('xferMsg').textContent = 'QR 만드는 중…';
+    try{
+      if (!window.QRCode) await new Promise((res, rej) => { const s = document.createElement('script'); s.src = 'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js'; s.onload = res; s.onerror = () => rej(new Error('QR 라이브러리를 불러오지 못했어요')); document.head.appendChild(s); });
+      new QRCode(box, { text: url, width: 260, height: 260, correctLevel: QRCode.CorrectLevel.L });
+      $('xferMsg').textContent = `폰 카메라로 이 QR을 찍고 열리는 링크를 Chrome으로 여세요 (${url.length}자).`;
+    }catch(e){
+      box.style.display = 'none';
+      $('xferMsg').textContent = (/overflow|length/i.test(e.message) ? '설정이 길어서 QR로는 안 돼요. ' : 'QR 생성 실패: ' + e.message + ' ') + '[📋 코드 복사]를 사용하세요.';
+    }
+  };
+  $('xferApply').onclick = () => { const v = $('xferIn').value.trim(); if (v) importCode(v, false); };
+  if (location.hash.indexOf('#import=') === 0){
+    const code = decodeURIComponent(location.hash.slice(8));
+    history.replaceState(null, '', location.pathname + location.search);
+    setTimeout(() => importCode(code, true), 300);
+  }
+
   $('ver').textContent = APP_VER;
   if (!SR) setStatus('음성인식 미지원 브라우저 — 안드로이드 Chrome 또는 iPhone Safari로 열어주세요');
   else setStatus('준비됨 · ' + APP_VER);
