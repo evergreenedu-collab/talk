@@ -21,7 +21,9 @@
   .side .top{display:flex;justify-content:space-between;align-items:center;font-size:12px;color:var(--mute);gap:8px}
   .side .top .lbl{font-weight:700;font-size:13px}
   .side .top .lbl.k{color:var(--ko)} .side .top .lbl.v{color:var(--vi)}
-  .side .mine{font-size:14px;color:var(--mute);line-height:1.35;margin-top:4px;min-height:1.2em;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+  .side .mine{font-size:14px;color:var(--mute);line-height:1.35;margin-top:4px;min-height:1.2em;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;transition:font-size .15s}
+  .side .mine.live{font-size:clamp(18px,5vw,26px);color:var(--ink);font-weight:600;-webkit-line-clamp:3}
+  .side .mine.skip{color:#f0b35a;font-style:italic}
   .side .theirs{flex:1;display:flex;align-items:center;font-size:clamp(22px,6.2vw,34px);font-weight:700;line-height:1.3;word-break:keep-all;overflow:auto;padding:4px 0}
   .side .alt{font-size:14px;color:var(--mute);line-height:1.35;border-top:1px dashed var(--line);padding-top:4px;margin-top:2px}
   .side .alt:empty{display:none}
@@ -33,16 +35,19 @@
   @keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(255,255,255,.35)}50%{box-shadow:0 0 0 12px rgba(255,255,255,0)}}
   .dot{width:10px;height:10px;border-radius:50%;background:#fff;opacity:.5}
   .listening .dot{opacity:1;background:#ff4d4d}
-  #bar{height:40px;display:flex;align-items:center;justify-content:space-between;padding:0 10px;background:#000;font-size:12px;color:var(--mute);gap:8px;flex-shrink:0}
-  #bar button{background:#1c1c22;border:1px solid var(--line);color:var(--ink);border-radius:999px;padding:6px 10px;font-size:12px}
+  #bar{height:40px;display:flex;align-items:center;justify-content:space-between;padding:0 8px;background:#000;font-size:12px;color:var(--mute);gap:6px;flex-shrink:0}
+  #bar button{background:#1c1c22;border:1px solid var(--line);color:var(--ink);border-radius:999px;padding:6px 9px;font-size:12px;white-space:nowrap}
+  #bar button.on{background:#1f3d2a;border-color:var(--ok);color:#bff5d0}
   #bar .st{flex:1;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  #bar .st.resume{color:#fff;background:#2a2a31;border-radius:999px;padding:6px 10px;font-weight:700}
   /* settings */
   #cfg{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:flex-end;z-index:10}
   #cfg.show{display:flex}
   #cfg .sheet{background:#1a1a20;width:100%;max-height:88dvh;overflow:auto;border-radius:18px 18px 0 0;padding:16px 16px calc(16px + env(safe-area-inset-bottom))}
   #cfg h2{margin:0 0 10px;font-size:16px}
   #cfg label{display:block;font-size:13px;color:var(--mute);margin:12px 0 4px}
-  #cfg input[type=text],#cfg input[type=password],#cfg select{width:100%;font:inherit;font-size:15px;padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:#111;color:var(--ink)}
+  #cfg input[type=text],#cfg input[type=password],#cfg select,#cfg textarea{width:100%;font:inherit;font-size:15px;padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:#111;color:var(--ink)}
+  #cfg textarea{min-height:84px;line-height:1.4;resize:vertical}
   #cfg .row{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:12px;font-size:14px}
   #cfg .row input[type=checkbox]{width:22px;height:22px}
   #cfg .btns{display:flex;gap:8px;margin-top:16px}
@@ -51,6 +56,7 @@
   #cfg .warn{font-size:12px;color:#f0b35a;line-height:1.5;margin-top:10px}
   #cfg .hist{font-size:13px;color:var(--mute);line-height:1.5;max-height:30dvh;overflow:auto;border:1px solid var(--line);border-radius:10px;padding:8px;margin-top:6px}
   #cfg .hist div{padding:3px 0;border-bottom:1px dashed var(--line)}
+  #cfg .hist .err{color:#f0b35a;word-break:break-all}
   #nokey{position:absolute;inset:0;display:none;align-items:center;justify-content:center;text-align:center;padding:24px;background:rgba(17,17,20,.92);z-index:5;font-size:15px;line-height:1.7}
   #nokey.show{display:flex}
   #nokey button{display:block;margin:14px auto 0;padding:12px 20px;border-radius:12px;border:none;background:var(--ko);color:#fff;font-size:15px;font-weight:700}
@@ -68,7 +74,8 @@
   </section>
 
   <div id="bar">
-    <button id="flipBtn" title="위쪽 화면 뒤집기">↕ 뒤집기</button>
+    <button id="flipBtn" title="위쪽 화면 뒤집기">↕</button>
+    <button id="autoBtn" title="자동 대화 모드">🔁 자동</button>
     <span class="st" id="status">준비됨</span>
     <button id="cfgBtn">⚙ 설정</button>
   </div>
@@ -112,12 +119,26 @@
     <input type="text" id="gemModel" placeholder="gemini-2.5-flash">
     <div class="row" id="primaryRow"><span>비교 모드에서 음성으로 읽을 쪽</span>
       <select id="primary" style="width:auto"><option value="claude">Claude</option><option value="gemini">Gemini</option></select></div>
-    <div class="row"><span>번역 후 자동으로 상대편 듣기 시작<br><small style="color:var(--mute)">대화가 번갈아 이어질 때 버튼을 안 눌러도 됨</small></span><input type="checkbox" id="autoAlt" checked></div>
-    <div class="row"><span>번역 음성 읽어주기 (TTS)</span><input type="checkbox" id="tts" checked></div>
-    <div class="row"><span>위쪽(베트남어) 화면 180° 뒤집기<br><small style="color:var(--mute)">마주 보고 쓸 때 켬</small></span><input type="checkbox" id="flip" checked></div>
-    <label>말투 메모 (선택) — 번역 시 참고할 호칭·관계</label>
+
+    <label>이름 사전 — 한 줄에 하나: <b>한국어 표기들 = 베트남어 이름</b><br><small>음성인식이 이름을 다른 단어로 바꿔 들어도 복원합니다. 첫 번째 표기가 한국어 자막에 쓰입니다.</small></label>
+    <textarea id="names" placeholder="봉, 봉아, 봉화 = Bông"></textarea>
+    <label>말투 메모 (선택) — 호칭·관계</label>
     <input type="text" id="persona" placeholder="예: 여자친구에겐 anh/em, 아이들에겐 chú/con">
-    <label>최근 대화 기록</label>
+
+    <div class="row"><span>🔁 자동 대화 모드<br><small style="color:var(--mute)">한 번 누르면 번갈아 듣기·번역을 계속합니다</small></span><input type="checkbox" id="autoAlt" checked></div>
+    <label>잡음 필터 — 대화와 무관한 소리(TV·옆사람)를 번역하지 않음</label>
+    <select id="noise">
+      <option value="off">끔</option>
+      <option value="normal">보통 (권장)</option>
+      <option value="high">높음 (시끄러운 곳)</option>
+    </select>
+    <div class="row"><span>번역 음성 읽어주기 (TTS)</span><input type="checkbox" id="tts" checked></div>
+    <div class="row"><span>한국어 번역도 음성으로 읽기<br><small style="color:var(--mute)">끄면 한국어는 자막만 — 대화가 더 빨라집니다</small></span><input type="checkbox" id="ttsKo" checked></div>
+    <label>읽기 속도</label>
+    <select id="rate"><option value="0.95">보통</option><option value="1.1">조금 빠르게</option><option value="1.25">빠르게</option></select>
+    <div class="row"><span>위쪽(베트남어) 화면 180° 뒤집기<br><small style="color:var(--mute)">마주 보고 쓸 때 켬</small></span><input type="checkbox" id="flip" checked></div>
+
+    <label>최근 대화 기록 · 마지막 오류</label>
     <div class="hist" id="hist">(없음)</div>
     <div class="warn" id="ttsInfo"></div>
     <div class="warn">API 키는 이 기기 브라우저(localStorage)에만 저장됩니다. 공용 기기에서는 사용 후 키를 지우세요. 콘솔에서 월 사용 한도를 설정해 두면 안전합니다.</div>
@@ -129,24 +150,60 @@
 (() => {
   const $ = id => document.getElementById(id);
   const LS = 'kvtalk.cfg.v1';
-  const cfg = Object.assign({ apiKey:'', model:'claude-haiku-5-5', engine:'claude', gemKey:'', gemModel:'gemini-2.5-flash', primary:'claude', autoAlt:true, tts:true, flip:true, persona:'' },
+  const DEFAULT_NAMES = '봉, 봉아, 봉이, 봉화 = Bông\n보이, 보이야, 보위 = Bối\n수아, 수아야, 수화, 수야 = Sữa';
+  const cfg = Object.assign({ apiKey:'', model:'claude-haiku-5-5', engine:'claude', gemKey:'', gemModel:'gemini-2.5-flash', primary:'claude',
+                              autoAlt:true, tts:true, ttsKo:true, rate:0.95, flip:true, persona:'', names:DEFAULT_NAMES, noise:'normal' },
     (()=>{ try{ return JSON.parse(localStorage.getItem(LS)||'{}'); }catch(e){ return {}; } })());
   const history = [];   // {from:'ko'|'vi', src, dst}
+  let lastErr = null;   // {heard, raw}
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   const synth = window.speechSynthesis;
-  let rec = null, listening = null, busy = false, voices = [];
+  let voices = [];
 
   const el = {
-    ko:{ side:$('sideKo'), btn:$('btnKo'), mine:$('mineKo'), theirs:$('theirsKo'), alt:$('altKo'), st:$('stKo'), label:'눌러서 말하기', listen:'듣는 중… 말하세요', srLang:'ko-KR' },
-    vi:{ side:$('sideVi'), btn:$('btnVi'), mine:$('mineVi'), theirs:$('theirsVi'), alt:$('altVi'), st:$('stVi'), label:'Bấm để nói', listen:'Đang nghe… hãy nói', srLang:'vi-VN' },
+    ko:{ side:$('sideKo'), btn:$('btnKo'), mine:$('mineKo'), theirs:$('theirsKo'), alt:$('altKo'), st:$('stKo'), label:'눌러서 말하기', listen:'듣는 중… 말하세요', srLang:'ko-KR', again:'다시 말씀해 주세요', skipped:'무시됨' },
+    vi:{ side:$('sideVi'), btn:$('btnVi'), mine:$('mineVi'), theirs:$('theirsVi'), alt:$('altVi'), st:$('stVi'), label:'Bấm để nói', listen:'Đang nghe… hãy nói', srLang:'vi-VN', again:'Nói lại nhé', skipped:'Bỏ qua' },
   };
   const other = l => l === 'ko' ? 'vi' : 'ko';
-  const setStatus = t => $('status').textContent = t;
+  const setStatus = (t, resumeLang) => {
+    const s = $('status'); s.textContent = t;
+    s.classList.toggle('resume', !!resumeLang);
+    s.onclick = resumeLang ? () => { setStatus(''); startListening(resumeLang); } : null;
+  };
+  const save = () => { try{ localStorage.setItem(LS, JSON.stringify(cfg)); }catch(e){} };
+
+  // ---------- name dictionary ----------
+  function parseNames(){
+    return String(cfg.names||'').split('\n').map(line => {
+      const m = line.split('=');
+      if (m.length < 2) return null;
+      const ko = m[0].split(/[,/、]/).map(s => s.trim()).filter(Boolean);
+      const vi = m.slice(1).join('=').trim();
+      return (ko.length && vi) ? { ko, vi } : null;
+    }).filter(Boolean);
+  }
+  // If the whole utterance is just one registered variant, normalise it to the canonical form before translating.
+  function fixNameOnly(lang, text){
+    const t = text.replace(/[!?.,~\s]+$/,'').trim();
+    for (const n of parseNames()){
+      if (lang === 'ko' && n.ko.some(k => k === t)) return n.ko[0];
+      if (lang === 'vi' && t.toLowerCase() === n.vi.toLowerCase()) return n.vi;
+    }
+    return text;
+  }
 
   // ---------- settings ----------
   function applyCfg(){
     el.vi.side.classList.toggle('flip', !!cfg.flip);
     $('nokey').classList.toggle('show', !hasKey());
+    $('autoBtn').classList.toggle('on', !!cfg.autoAlt);
+    $('autoBtn').textContent = cfg.autoAlt ? '🔁 자동 켬' : '🔁 자동 끔';
+  }
+  function renderHist(){
+    const rows = [];
+    if (lastErr) rows.push(`<div class="err">⚠ 마지막 오류 — 들은 말: ${esc(lastErr.heard)}<br>응답: ${esc(lastErr.raw || '(없음)')}</div>`);
+    for (const h of history) rows.push(`<div>${h.from==='ko'?'🇰🇷':'🇻🇳'} ${esc(h.src)}<br>→ ${esc(h.dst)}</div>`);
+    $('hist').innerHTML = rows.length ? rows.join('') : '(없음)';
   }
   function openCfg(){
     $('apiKey').value = cfg.apiKey;
@@ -155,8 +212,10 @@
     $('modelCustom').style.display = $('model').value === 'custom' ? 'block' : 'none';
     $('modelCustom').value = known.includes(cfg.model) ? '' : cfg.model;
     $('engine').value = cfg.engine; $('gemKey').value = cfg.gemKey; $('gemModel').value = cfg.gemModel; $('primary').value = cfg.primary;
-    $('autoAlt').checked = cfg.autoAlt; $('tts').checked = cfg.tts; $('flip').checked = cfg.flip; $('persona').value = cfg.persona;
-    $('hist').innerHTML = history.length ? history.map(h => `<div>${h.from==='ko'?'🇰🇷':'🇻🇳'} ${esc(h.src)}<br>→ ${esc(h.dst)}</div>`).join('') : '(없음)';
+    $('names').value = cfg.names; $('persona').value = cfg.persona;
+    $('autoAlt').checked = cfg.autoAlt; $('noise').value = cfg.noise; $('tts').checked = cfg.tts; $('ttsKo').checked = cfg.ttsKo;
+    $('rate').value = String(cfg.rate); $('flip').checked = cfg.flip;
+    renderHist();
     loadVoices();
     const vv = pickVoice('vi'), kv = pickVoice('ko');
     $('ttsInfo').textContent = `음성: 한국어 ${kv ? '✔ ' + kv.name : '✖ 없음'} · 베트남어 ${vv ? '✔ ' + vv.name : '✖ 없음 (폰 설정 > 텍스트 음성 변환에서 베트남어 음성 설치)'}`;
@@ -169,11 +228,13 @@
     cfg.apiKey = $('apiKey').value.trim();
     cfg.model = $('model').value === 'custom' ? ($('modelCustom').value.trim() || 'claude-haiku-5-5') : $('model').value;
     cfg.engine = $('engine').value; cfg.gemKey = $('gemKey').value.trim(); cfg.gemModel = $('gemModel').value.trim() || 'gemini-2.5-flash'; cfg.primary = $('primary').value;
-    cfg.autoAlt = $('autoAlt').checked; cfg.tts = $('tts').checked; cfg.flip = $('flip').checked; cfg.persona = $('persona').value.trim();
-    try{ localStorage.setItem(LS, JSON.stringify(cfg)); }catch(e){}
-    applyCfg(); $('cfg').classList.remove('show'); setStatus('저장됨');
+    cfg.names = $('names').value.trim(); cfg.persona = $('persona').value.trim();
+    cfg.autoAlt = $('autoAlt').checked; cfg.noise = $('noise').value; cfg.tts = $('tts').checked; cfg.ttsKo = $('ttsKo').checked;
+    cfg.rate = parseFloat($('rate').value) || 0.95; cfg.flip = $('flip').checked;
+    save(); applyCfg(); $('cfg').classList.remove('show'); setStatus('저장됨');
   };
-  $('flipBtn').onclick = () => { cfg.flip = !cfg.flip; try{ localStorage.setItem(LS, JSON.stringify(cfg)); }catch(e){} applyCfg(); };
+  $('flipBtn').onclick = () => { cfg.flip = !cfg.flip; save(); applyCfg(); };
+  $('autoBtn').onclick = () => { cfg.autoAlt = !cfg.autoAlt; save(); applyCfg(); setStatus(cfg.autoAlt ? '자동 대화: 한쪽 버튼을 눌러 시작' : '자동 대화 끔'); if (!cfg.autoAlt) fails = 0; };
   applyCfg();
 
   // ---------- TTS ----------
@@ -183,44 +244,66 @@
     const want = lang === 'vi' ? 'vi' : 'ko';
     return voices.find(v => (v.lang||'').toLowerCase().replace('_','-').startsWith(want)) || null;
   }
+  let ttsPending = null;   // {timer, resolve}
+  function stopTts(){
+    if (ttsPending){ clearTimeout(ttsPending.timer); const r = ttsPending.resolve; ttsPending = null; r(); }
+    try{ if (synth) synth.cancel(); }catch(e){}
+  }
   function speak(text, lang){
     return new Promise(res => {
-      if (!cfg.tts || !synth){ res(); return; }
+      if (!cfg.tts || !synth || (lang === 'ko' && !cfg.ttsKo)){ res(); return; }
+      stopTts();
       try{
-        synth.cancel();
         const u = new SpeechSynthesisUtterance(text);
         u.lang = lang === 'vi' ? 'vi-VN' : 'ko-KR';
         const v = pickVoice(lang); if (v) u.voice = v;
-        u.rate = 0.95;
-        let done = false; const fin = () => { if (!done){ done = true; res(); } };
+        u.rate = cfg.rate || 0.95;
+        const fin = () => { if (ttsPending && ttsPending.resolve === res){ clearTimeout(ttsPending.timer); ttsPending = null; res(); } };
         u.onend = fin; u.onerror = fin;
-        setTimeout(fin, 15000); // safety
+        ttsPending = { resolve: res, timer: setTimeout(() => { stopTts(); }, 20000) };
         synth.speak(u);
-      }catch(e){ res(); }
+      }catch(e){ ttsPending = null; res(); }
     });
   }
 
-  // ---------- STT ----------
+  // ---------- STT + auto-conversation state machine ----------
+  let rec = null, listening = null, busy = false, session = 0, fails = 0;
+  let lastTtsText = '', lastHeard = { text:'', at:0 };
+  const norm = s => String(s||'').toLowerCase().replace(/[\s!?.,~…"'“”‘’]/g,'');
+
   function stopListening(){
-    if (rec){ try{ rec.onend = null; rec.stop(); }catch(e){} rec = null; }
-    if (listening){ el[listening].btn.classList.remove('listening'); el[listening].btn.querySelector('.t').textContent = el[listening].label; el[listening].st.textContent=''; }
+    session++;
+    if (rec){ try{ rec.onend = null; rec.onerror = null; rec.onresult = null; rec.stop(); }catch(e){} rec = null; }
+    if (listening){ const L = el[listening]; L.btn.classList.remove('listening'); L.btn.querySelector('.t').textContent = L.label; L.st.textContent=''; L.mine.classList.remove('live'); }
     listening = null;
+  }
+  // Decide what happens after a turn ends. reason: 'ok' | 'skip' | 'fail'
+  function advance(nextLang, reason){
+    if (!cfg.autoAlt) return;
+    if (reason === 'fail'){ fails++; if (fails >= 3){ fails = 0; setStatus('⏸ 연속 오류로 자동 대화 멈춤 — 탭하여 계속', nextLang); return; } }
+    else if (reason === 'ok') fails = 0;
+    startListening(nextLang);
   }
   function startListening(lang){
     if (!SR){ setStatus('이 브라우저는 음성인식을 지원하지 않습니다 (Chrome/Safari 사용)'); return; }
     if (!hasKey()){ openCfg(); return; }
-    if (synth) synth.cancel();
+    if (busy) return;
+    stopTts();
     stopListening();
+    const my = ++session;
     const r = new SR();
     r.lang = el[lang].srLang; r.interimResults = true; r.continuous = false; r.maxAlternatives = 1;
-    let finalText = '', interim = '';
+    let finalText = '', interim = '', lastResultAt = 0;
     r.onstart = () => {
+      if (my !== session) return;
       listening = lang; rec = r;
       el[lang].btn.classList.add('listening'); el[lang].btn.querySelector('.t').textContent = el[lang].listen;
-      el[lang].mine.textContent = ''; setStatus(lang === 'ko' ? '🎙 한국어 듣는 중' : '🎙 Đang nghe tiếng Việt');
+      el[lang].mine.textContent = ''; el[lang].mine.classList.remove('skip'); el[lang].mine.classList.add('live');
+      setStatus(lang === 'ko' ? '🎙 한국어 듣는 중' : '🎙 Đang nghe tiếng Việt');
     };
     r.onresult = e => {
-      interim = '';
+      if (my !== session) return;
+      interim = ''; lastResultAt = performance.now();
       for (let i = e.resultIndex; i < e.results.length; i++){
         const t = e.results[i][0].transcript;
         if (e.results[i].isFinal) finalText += t; else interim += t;
@@ -228,37 +311,54 @@
       el[lang].mine.textContent = (finalText + ' ' + interim).trim();
     };
     r.onerror = e => {
+      if (my !== session) return;
       const code = e.error;
       stopListening();
       if (code === 'not-allowed' || code === 'service-not-allowed') setStatus('마이크 권한이 필요합니다. 브라우저 주소창의 🔒 → 마이크 허용');
-      else if (code === 'no-speech') setStatus(lang === 'ko' ? '말소리가 없었어요. 다시 눌러주세요' : 'Không nghe thấy gì. Bấm lại nhé');
+      else if (code === 'no-speech'){ setStatus(lang === 'ko' ? '말소리가 없었어요' : 'Không nghe thấy gì'); advance(lang, 'fail'); }
       else if (code === 'aborted') setStatus('');
-      else setStatus('음성인식 오류: ' + code);
+      else { setStatus('음성인식 오류: ' + code); advance(lang, 'fail'); }
     };
     r.onend = () => {
+      if (my !== session) return;
       const text = (finalText || interim).trim();
+      const recDelay = lastResultAt ? (performance.now() - lastResultAt) / 1000 : 0;
       stopListening();
-      if (text) handleUtterance(lang, text);
-      else setStatus(lang === 'ko' ? '인식된 말이 없어요' : 'Không nhận được lời nói');
+      if (text) handleUtterance(lang, text, recDelay);
+      else { setStatus(lang === 'ko' ? '인식된 말이 없어요' : 'Không nhận được lời nói'); advance(lang, 'fail'); }
     };
-    try{ r.start(); }catch(e){ setStatus('음성인식 시작 실패: ' + e.message); }
+    try{ r.start(); }
+    catch(e){ stopListening(); setStatus('⏸ 마이크를 다시 켜지 못했어요 — 탭하여 계속', lang); }
   }
-  el.ko.btn.onclick = () => listening === 'ko' ? stopListening() : startListening('ko');
-  el.vi.btn.onclick = () => listening === 'vi' ? stopListening() : startListening('vi');
+  el.ko.btn.onclick = () => { fails = 0; listening === 'ko' ? stopListening() : startListening('ko'); };
+  el.vi.btn.onclick = () => { fails = 0; listening === 'vi' ? stopListening() : startListening('vi'); };
 
-  // ---------- Claude ----------
+  // ---------- prompts ----------
+  function namesBlock(){
+    const list = parseNames();
+    if (!list.length) return '';
+    const rows = list.map(n => `- ${n.ko.join(' / ')} ⇄ ${n.vi}  (Korean canonical: ${n.ko[0]})`).join('\n');
+    return `
+Name dictionary (family members). Speech recognition often turns these names into similar-sounding ordinary words.
+${rows}
+- KO→VI: if one of the Korean forms appears where a person is being addressed or referred to, render it as the Vietnamese name (e.g. "수아야" → "Sữa ơi"). If the word is clearly an ordinary word in context (not a person), translate normally.
+- VI→KO: render the Vietnamese name with its Korean canonical form (e.g. Bông → 봉, as "봉아" when addressing).`;
+  }
   function systemPrompt(){
     return `You are a live interpreter between a Korean man and his Vietnamese partner and her two young daughters (about 5–10 years old). They talk casually at home or on video calls.
 ${cfg.persona ? 'Relationship / address terms note from the user: ' + cfg.persona : ''}
+${namesBlock()}
 
 Rules:
 - Translate the NEW UTTERANCE only, Korean→Vietnamese or Vietnamese→Korean as indicated.
 - Natural, spoken, casual family register (한국어는 반말, tiếng Việt thân mật). Short sentences. No explanations.
 - The text comes from speech recognition: it may be fragmented, missing particles, or contain recognition errors. Infer the most likely intended meaning using the recent conversation; never translate word-by-word nonsense literally.
 - Children speak in incomplete sentences. Render the most likely intended meaning in simple child-appropriate words.
-- Keep English words, names, brands and place names as they are. Keep numbers, times and money exact.
-- If genuinely ambiguous in a way that changes meaning, choose the most likely reading and put a ≤10-word note in the SPEAKER's language in "note"; otherwise note is "".
-- Respond with ONLY a JSON object: {"t":"<translation>","note":"<note or empty>"}`;
+- Keep English words, brands and place names as they are. Keep numbers, times and money exact.
+- "t" must NEVER be empty unless noise is true. If the utterance is only a name or a call, translate it as a natural call ("Sữa ơi!" / "수아야!"). If unsure, give the most likely translation in "t" and a ≤10-word note in the SPEAKER's language in "note"; otherwise note is "".
+- "noise": true ONLY if the text is clearly not part of this conversation — e.g. TV/radio audio, a third party's unrelated talk, or meaningless fragments with no plausible meaning. Short children's fragments, names, greetings and one-word answers are NOT noise.${cfg.noise === 'high' ? ' Be strict: anything that does not fit the recent conversation is noise.' : ''}
+- "lang_ok": false if the text does not plausibly read as the indicated source language (it looks like the OTHER language mis-recognised), else true.
+- Respond with ONLY a JSON object: {"t":"<translation>","note":"<note or empty>","noise":false,"lang_ok":true}`;
   }
   function hasKey(){
     if (cfg.engine === 'claude') return !!cfg.apiKey;
@@ -270,12 +370,13 @@ Rules:
     const ctx = history.slice(-8).map(h => `${h.from==='ko'?'[KO speaker]':'[VI speaker]'} ${h.src} ⇒ ${h.dst}`).join('\n');
     return `Recent conversation (oldest first):\n${ctx || '(none)'}\n\nNEW UTTERANCE in ${lang==='ko'?'Korean':'Vietnamese'} → translate to ${to==='ko'?'Korean':'Vietnamese'}:\n${text}`;
   }
+  // Returns {t, note, noise, langOk, raw}. Never throws; the caller validates.
   function parseJson(raw){
-    try{
-      const m = raw.match(/\{[\s\S]*\}/);
-      const j = JSON.parse(m ? m[0] : raw);
-      return { t: String(j.t||'').trim(), note: String(j.note||'').trim() };
-    }catch(e){ return { t: raw.replace(/^["']|["']$/g,'').trim(), note:'' }; }
+    const clean = String(raw||'').replace(/```(?:json)?/gi,'').trim();
+    let j = null;
+    try{ j = JSON.parse(clean); }catch(e){ try{ const m = clean.match(/\{[\s\S]*\}/); if (m) j = JSON.parse(m[0]); }catch(e2){} }
+    if (j && typeof j === 'object') return { t:String(j.t||'').trim(), note:String(j.note||'').trim(), noise:j.noise === true, langOk:j.lang_ok !== false, raw };
+    return { t: clean.replace(/^["']|["']$/g,'').trim(), note:'', noise:false, langOk:true, raw };
   }
   async function translateGemini(lang, text){
     if (!cfg.gemKey) throw new Error('Gemini API 키 없음');
@@ -297,16 +398,18 @@ Rules:
       throw new Error(msg);
     }
     const data = await resp.json();
-    const raw = (((data.candidates||[])[0]||{}).content||{}).parts ? data.candidates[0].content.parts.map(p=>p.text||'').join('').trim() : '';
-    return parseJson(raw);
+    const cand = (data.candidates||[])[0] || {};
+    const raw = ((cand.content||{}).parts||[]).map(p=>p.text||'').join('').trim();
+    const out = parseJson(raw);
+    if (!raw) out.stop = cand.finishReason || 'no content';
+    return out;
   }
   async function translateClaude(lang, text){
     if (!cfg.apiKey) throw new Error('Anthropic API 키 없음');
-    const user = userPrompt(lang, text);
     const resp = await fetch('https://api.anthropic.com/v1/messages', {
       method:'POST',
       headers:{ 'content-type':'application/json', 'x-api-key':cfg.apiKey, 'anthropic-version':'2023-06-01', 'anthropic-dangerous-direct-browser-access':'true' },
-      body: JSON.stringify({ model: cfg.model, max_tokens: 300, system: systemPrompt(), messages:[{role:'user', content:user}] })
+      body: JSON.stringify({ model: cfg.model, max_tokens: 300, system: systemPrompt(), messages:[{role:'user', content:userPrompt(lang, text)}] })
     });
     if (!resp.ok){
       let msg = 'HTTP ' + resp.status;
@@ -319,53 +422,97 @@ Rules:
     }
     const data = await resp.json();
     const raw = (data.content || []).map(c => c.text || '').join('').trim();
-    return parseJson(raw);
+    const out = parseJson(raw);
+    if (!raw) out.stop = data.stop_reason || 'no content';
+    return out;
   }
-  // Returns {t, note, alt?} — alt is the secondary engine's result in compare mode.
+  // Validate one engine result; throws a readable error when unusable.
+  function check(r){
+    if (r.noise) return r;
+    if (!r.t){
+      if (r.stop) throw Object.assign(new Error('응답 없음 (' + r.stop + ')'), { raw: r.raw });
+      throw Object.assign(new Error(r.note ? '번역 보류: ' + r.note : '빈 응답'), { raw: r.raw });
+    }
+    return r;
+  }
+  // Returns {t, note, noise, langOk, raw, alt?, mainLabel?}
   async function translate(lang, text){
-    if (cfg.engine === 'claude') return translateClaude(lang, text);
-    if (cfg.engine === 'gemini') return translateGemini(lang, text);
+    if (cfg.engine === 'claude') return check(await translateClaude(lang, text));
+    if (cfg.engine === 'gemini') return check(await translateGemini(lang, text));
     const [c, g] = await Promise.allSettled([translateClaude(lang, text), translateGemini(lang, text)]);
-    const pick = r => r.status === 'fulfilled' ? r.value : { t:'', note:'', err:r.reason && r.reason.message };
+    const pick = r => { if (r.status !== 'fulfilled') return { t:'', err:r.reason && r.reason.message }; try{ return check(r.value); }catch(e){ return { t:'', err:e.message, raw:r.value.raw }; } };
     const R = { claude: pick(c), gemini: pick(g) };
     let mainName = cfg.primary, secName = cfg.primary === 'gemini' ? 'claude' : 'gemini';
-    if (!R[mainName].t && R[secName].t) [mainName, secName] = [secName, mainName];
-    if (!R[mainName].t) throw new Error((R.claude.err||'') + ' / ' + (R.gemini.err||''));
+    if (!R[mainName].t && !R[mainName].noise && (R[secName].t || R[secName].noise)) [mainName, secName] = [secName, mainName];
+    const M = R[mainName];
+    if (!M.t && !M.noise) throw Object.assign(new Error((R.claude.err||'') + ' / ' + (R.gemini.err||'')), { raw: R.claude.raw || R.gemini.raw });
     const cap = n => n === 'claude' ? 'Claude' : 'Gemini';
     const sec = R[secName];
-    return { t: R[mainName].t, note: R[mainName].note, mainLabel: cap(mainName),
-             alt: cap(secName) + (sec.t ? ': ' + sec.t : ' ⚠ ' + (sec.err||'오류')) };
+    return Object.assign({}, M, { mainLabel: cap(mainName), alt: cap(secName) + (sec.t ? ': ' + sec.t : ' ⚠ ' + (sec.err||'오류')) });
   }
 
-  async function handleUtterance(lang, text){
+  async function handleUtterance(lang, rawText, recDelay){
     if (busy) return;
-    busy = true;
     const to = other(lang);
+    const now = performance.now();
+    // Cheap local filters: echo of our own TTS, or the same sentence twice in a row.
+    if (lastTtsText && norm(rawText) === norm(lastTtsText)){ markSkip(lang, rawText, '🔊'); advance(lang, 'skip'); return; }
+    if (lastHeard.text && norm(rawText) === norm(lastHeard.text) && now - lastHeard.at < 2500){ advance(lang, 'skip'); return; }
+    lastHeard = { text: rawText, at: now };
+    const text = fixNameOnly(lang, rawText);
+
+    busy = true;
     el[lang].mine.textContent = text;
     el[lang].btn.classList.add('busy'); el[to].btn.classList.add('busy');
     el[to].theirs.classList.add('dim'); el[to].theirs.textContent = '…'; el[to].alt.textContent='';
     setStatus('번역 중… / Đang dịch…');
+    const t0 = performance.now();
+    let r;
     try{
-      const { t, note, alt, mainLabel } = await translate(lang, text);
-      if (!t) throw new Error('빈 응답');
-      el[to].theirs.classList.remove('dim'); el[to].theirs.textContent = t;
-      el[to].alt.textContent = alt ? alt : '';
-      el[to].st.textContent = mainLabel ? '🔊 ' + mainLabel : '';
-      el[lang].st.textContent = note ? '💬 ' + note : '';
-      history.push({ from: lang, src: text, dst: t });
-      setStatus('🔊 ' + (to==='vi' ? 'tiếng Việt' : '한국어'));
-      await speak(t, to);
-      setStatus('준비됨');
-      busy = false;
-      el[lang].btn.classList.remove('busy'); el[to].btn.classList.remove('busy');
-      if (cfg.autoAlt) startListening(to);   // hand the mic to the other side
+      r = await translate(lang, text);
     }catch(e){
-      busy = false;
-      el[lang].btn.classList.remove('busy'); el[to].btn.classList.remove('busy');
+      busy = false; unbusy(lang, to);
+      lastErr = { heard: text, raw: String(e.raw || e.message || '').slice(0, 200) };
       el[to].theirs.classList.add('dim'); el[to].theirs.textContent = '⚠ ' + e.message;
       setStatus('오류: ' + e.message);
+      advance(lang, 'fail');
+      return;
     }
+    const tApi = (performance.now() - t0) / 1000;
+    const words = text.split(/\s+/).filter(Boolean).length;
+
+    if (r.noise && cfg.noise !== 'off'){
+      busy = false; unbusy(lang, to);
+      markSkip(lang, text, r.note || '대화와 무관');
+      setStatus(el[lang].skipped + ' · ' + (r.note || ''));
+      advance(lang, 'skip');
+      return;
+    }
+    if (!r.langOk && cfg.autoAlt && words >= 3){
+      busy = false; unbusy(lang, to);
+      el[to].theirs.classList.add('dim'); el[to].theirs.textContent = el[to].again;
+      el[lang].mine.textContent = text; el[lang].mine.classList.add('skip');
+      setStatus(lang === 'ko' ? '베트남어로 들린 것 같아요 → 상대편 듣기' : 'Có vẻ là tiếng Hàn → nghe phía bên kia');
+      advance(to, 'skip');
+      return;
+    }
+
+    el[to].theirs.classList.remove('dim'); el[to].theirs.textContent = r.t;
+    el[to].alt.textContent = r.alt ? r.alt : '';
+    el[to].st.textContent = r.mainLabel ? '🔊 ' + r.mainLabel : '';
+    el[lang].st.textContent = r.note ? '💬 ' + r.note : '';
+    history.push({ from: lang, src: text, dst: r.t });
+    setStatus('🔊 ' + (to==='vi' ? 'tiếng Việt' : '한국어'));
+    const t1 = performance.now();
+    lastTtsText = r.t;
+    await speak(r.t, to);
+    const tTts = (performance.now() - t1) / 1000;
+    busy = false; unbusy(lang, to);
+    setStatus(`인식 ${recDelay.toFixed(1)}s · 번역 ${tApi.toFixed(1)}s · 음성 ${tTts.toFixed(1)}s`);
+    advance(to, 'ok');   // hand the mic to the other side
   }
+  function unbusy(a, b){ el[a].btn.classList.remove('busy'); el[b].btn.classList.remove('busy'); }
+  function markSkip(lang, text, why){ el[lang].mine.textContent = `(${el[lang].skipped}: ${why}) ${text}`; el[lang].mine.classList.add('skip'); }
 
   const esc = s => String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
   if (!SR) setStatus('음성인식 미지원 브라우저 — 안드로이드 Chrome 또는 iPhone Safari로 열어주세요');
