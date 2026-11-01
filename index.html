@@ -42,8 +42,7 @@
   .kids .ph{width:48px;height:48px;border-radius:50%;object-fit:cover;border:2px solid #ffd166;background:#2a2a31;flex:none;display:flex;align-items:center;justify-content:center;font-size:24px;line-height:1}
   .kids .ph[hidden]{display:none}
   .kids .tx{min-width:0;line-height:1.25}
-  .kids .tx b{display:block;font-size:15px;color:#ffe08a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .kids .tx small{font-size:11px;color:var(--mute)}
+  .kids .tx b{display:block;font-size:16px;color:#ffe08a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .talk{height:64px;border-radius:16px;border:2px solid transparent;font-size:19px;font-weight:800;color:#fff;display:flex;align-items:center;justify-content:center;gap:10px;user-select:none;flex-shrink:0}
   .ko .talk{background:var(--ko)} .vi .talk{background:#c92f46}
   .talk.listening{animation:pulse 1.1s ease-in-out infinite;border-color:#fff}
@@ -83,7 +82,7 @@
   <!-- Vietnamese side (top, can be flipped to face the other person) -->
   <section class="side vi flip" id="sideVi">
     <div class="top"><span class="lbl v">🇻🇳 Tiếng Việt</span><span id="stVi"></span></div>
-    <div class="kids"><img class="ph" id="kidsImg" alt="" hidden><span class="ph" id="kidsEmo">👧🧒</span><div class="tx"><b>⭐ Máy dịch của Bối &amp; Sữa 🌸</b><small>보이 &amp; 수아의 통역기</small></div></div>
+    <div class="kids"><img class="ph" id="kidsImg" alt="" hidden><span class="ph" id="kidsEmo">👧🧒</span><div class="tx"><b>⭐ Máy dịch của Bối &amp; Sữa 🌸</b></div></div>
     <div class="mine" id="mineVi"></div>
     <div class="alt" id="altVi"></div>
     <div class="theirs dim" id="theirsVi">Bấm nút bên dưới rồi nói. Nói xong sẽ tự dịch sang tiếng Hàn.</div>
@@ -177,7 +176,7 @@
 <script>
 (() => {
   const $ = id => document.getElementById(id);
-  const APP_VER = 'v7';
+  const APP_VER = 'v8';
   const LS = 'kvtalk.cfg.v1';
   const DEFAULT_NAMES = '봉, 봉아, 봉이, 봉화 = Bông\n보이, 보이야, 보위 = Bối\n수아, 수아야, 수화, 수야 = Sữa';
   const cfg = Object.assign({ apiKey:'', model:'claude-haiku-5-5', engine:'claude', gemKey:'', gemModel:'gemini-2.5-flash', primary:'claude',
