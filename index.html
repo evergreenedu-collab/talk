@@ -38,6 +38,10 @@
   .side .alt{font-size:14px;color:var(--mute);line-height:1.35;border-top:1px dashed var(--line);padding-top:4px;margin-top:2px}
   .side .alt:empty{display:none}
   .side .theirs.dim{opacity:.55;font-weight:500}
+  .side .theirs.long{font-size:clamp(17px,4.6vw,24px);line-height:1.35;align-items:flex-start}
+  .side .theirs:not(.dim){cursor:pointer}
+  .top .replay{display:none;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.28);color:#fff;border-radius:999px;padding:4px 10px;font-size:12px;font-weight:700;margin-left:auto;margin-right:6px}
+  .top .replay.show{display:inline-block}
   .kids{display:flex;align-items:center;gap:10px;margin:6px 0 2px;padding:6px 10px;border-radius:18px;background:linear-gradient(135deg,rgba(255,255,255,.12),rgba(255,255,255,.04));border:1.5px dashed rgba(255,209,102,.6);flex-shrink:0}
   .kids .ph{width:48px;height:48px;border-radius:50%;object-fit:cover;border:2px solid #ffd166;background:#2a2a31;flex:none;display:flex;align-items:center;justify-content:center;font-size:24px;line-height:1}
   .kids .ph[hidden]{display:none}
@@ -81,7 +85,7 @@
 <div id="app">
   <!-- Vietnamese side (top, can be flipped to face the other person) -->
   <section class="side vi flip" id="sideVi">
-    <div class="top"><span class="lbl v">🇻🇳 Tiếng Việt</span><span id="stVi"></span></div>
+    <div class="top"><span class="lbl v">🇻🇳 Tiếng Việt</span><button type="button" class="replay" id="replayVi">🔊 Nghe lại</button><span id="stVi"></span></div>
     <div class="kids"><img class="ph" id="kidsImg" alt="" hidden><span class="ph" id="kidsEmo">👧🧒</span><div class="tx"><b>⭐ Máy dịch của Bối &amp; Sữa 🌸</b></div></div>
     <div class="mine" id="mineVi"></div>
     <div class="alt" id="altVi"></div>
@@ -98,7 +102,7 @@
 
   <!-- Korean side (bottom) -->
   <section class="side ko" id="sideKo">
-    <div class="top"><span class="lbl k">🇰🇷 한국어</span><span id="stKo"></span></div>
+    <div class="top"><span class="lbl k">🇰🇷 한국어</span><button type="button" class="replay" id="replayKo">🔊 다시 듣기</button><span id="stKo"></span></div>
     <div class="mine" id="mineKo"></div>
     <div class="alt" id="altKo"></div>
     <div class="theirs dim" id="theirsKo">아래 버튼을 누르고 말하세요. 말이 끝나면 자동으로 베트남어로 번역·재생됩니다.</div>
@@ -165,6 +169,14 @@
     <div class="row"><span>배경 사진 선명도</span><select id="photoOp" style="width:auto"><option value="0.45">은은함</option><option value="0.65">보통</option><option value="0.85">선명</option></select></div>
 
     <div class="row"><span>🔁 자동 대화 모드<br><small style="color:var(--mute)">한 번 누르면 번갈아 듣기·번역을 계속합니다</small></span><input type="checkbox" id="autoAlt" checked></div>
+    <label>말 끝 감지 — 말이 멈추면 앱이 먼저 인식을 끝내고 번역 시작<br><small style="color:var(--mute)">베트남어는 엔진이 끝을 늦게 잡아 대기가 길어질 수 있어요</small></label>
+    <select id="fastEnd">
+      <option value="vi">베트남어만 (권장)</option>
+      <option value="both">둘 다</option>
+      <option value="off">끔 — 엔진 판단에 맡김</option>
+    </select>
+    <label>멈춤으로 보는 시간</label>
+    <select id="endSilence"><option value="800">0.8초 (빠름)</option><option value="1200">1.2초 (권장)</option><option value="1800">1.8초 (여유)</option></select>
     <label>잡음 필터 — 대화와 무관한 소리(TV·옆사람)를 번역하지 않음</label>
     <select id="noise">
       <option value="off">끔</option>
@@ -197,22 +209,23 @@
 <script>
 (() => {
   const $ = id => document.getElementById(id);
-  const APP_VER = 'v11';
+  const APP_VER = 'v12';
   const LS = 'kvtalk.cfg.v1';
   const DEFAULT_NAMES = '봉, 봉아, 봉이, 봉화 = Bông\n보이, 보이야, 보위 = Bối\n수아, 수아야, 수화, 수야 = Sữa\n미아, 마야 = Mya';
   const cfg = Object.assign({ apiKey:'', model:'claude-haiku-5-5', engine:'claude', gemKey:'', gemModel:'gemini-2.5-flash', primary:'claude',
                               autoAlt:true, tts:true, ttsKo:true, rate:0.95, flip:true, persona:'', names:DEFAULT_NAMES, noise:'normal',
-                              photoMode:'bg', photoOp:0.65, quality:'high', dialect:'auto', family:'' },
+                              photoMode:'bg', photoOp:0.65, quality:'high', dialect:'auto', family:'', fastEnd:'vi', endSilence:1200 },
     (()=>{ try{ return JSON.parse(localStorage.getItem(LS)||'{}'); }catch(e){ return {}; } })());
   const history = [];   // {from:'ko'|'vi', src, dst}
   let lastErr = null;   // {heard, raw}
+  let lastTurn = '';    // timing diagnostics of the last recognition turn
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   const synth = window.speechSynthesis;
   let voices = [];
 
   const el = {
-    ko:{ side:$('sideKo'), btn:$('btnKo'), mine:$('mineKo'), theirs:$('theirsKo'), alt:$('altKo'), st:$('stKo'), label:'눌러서 말하기', listen:'듣는 중… 말하세요', srLang:'ko-KR', again:'다시 말씀해 주세요', skipped:'무시됨' },
-    vi:{ side:$('sideVi'), btn:$('btnVi'), mine:$('mineVi'), theirs:$('theirsVi'), alt:$('altVi'), st:$('stVi'), label:'🎤 Bấm rồi nói nhé!', listen:'Đang nghe… hãy nói', srLang:'vi-VN', again:'Nói lại nhé', skipped:'Bỏ qua' },
+    ko:{ side:$('sideKo'), btn:$('btnKo'), mine:$('mineKo'), theirs:$('theirsKo'), alt:$('altKo'), st:$('stKo'), replay:$('replayKo'), label:'눌러서 말하기', listen:'듣는 중… 말하세요', srLang:'ko-KR', again:'다시 말씀해 주세요', skipped:'무시됨' },
+    vi:{ side:$('sideVi'), btn:$('btnVi'), mine:$('mineVi'), theirs:$('theirsVi'), alt:$('altVi'), st:$('stVi'), replay:$('replayVi'), label:'🎤 Bấm rồi nói nhé!', listen:'Đang nghe… hãy nói', srLang:'vi-VN', again:'Nói lại nhé', skipped:'Bỏ qua' },
   };
   const other = l => l === 'ko' ? 'vi' : 'ko';
   const setStatus = (t, resumeLang) => {
@@ -261,6 +274,7 @@
   function renderHist(){
     const rows = [];
     if (lastErr) rows.push(`<div class="err">⚠ 마지막 오류 — 들은 말: ${esc(lastErr.heard)}<br>응답: ${esc(lastErr.raw || '(없음)')}</div>`);
+    if (lastTurn) rows.push(`<div>⏱ 마지막 인식 턴: ${esc(lastTurn)}</div>`);
     for (const h of history) rows.push(`<div>${h.from==='ko'?'🇰🇷':'🇻🇳'} ${esc(h.src)}<br>→ ${esc(h.dst)}</div>`);
     $('hist').innerHTML = rows.length ? rows.join('') : '(없음)';
   }
@@ -275,6 +289,7 @@
     $('modelRow').style.display = cfg.quality === 'custom' ? 'block' : 'none';
     $('names').value = cfg.names; $('persona').value = cfg.persona; $('family').value = cfg.family;
     $('autoAlt').checked = cfg.autoAlt; $('noise').value = cfg.noise; $('tts').checked = cfg.tts; $('ttsKo').checked = cfg.ttsKo;
+    $('fastEnd').value = cfg.fastEnd; $('endSilence').value = String(cfg.endSilence);
     $('rate').value = String(cfg.rate); $('flip').checked = cfg.flip;
     $('photoMode').value = cfg.photoMode; $('photoOp').value = String(cfg.photoOp);
     renderHist();
@@ -294,6 +309,7 @@
     cfg.quality = $('quality').value; cfg.dialect = $('dialect').value;
     cfg.names = $('names').value.trim(); cfg.persona = $('persona').value.trim(); cfg.family = $('family').value.trim();
     cfg.autoAlt = $('autoAlt').checked; cfg.noise = $('noise').value; cfg.tts = $('tts').checked; cfg.ttsKo = $('ttsKo').checked;
+    cfg.fastEnd = $('fastEnd').value; cfg.endSilence = parseInt($('endSilence').value, 10) || 1200;
     cfg.rate = parseFloat($('rate').value) || 0.95; cfg.flip = $('flip').checked;
     cfg.photoMode = $('photoMode').value; cfg.photoOp = parseFloat($('photoOp').value) || 0.65;
     save(); applyCfg(); applyPhoto(); $('cfg').classList.remove('show'); setStatus('저장됨');
@@ -350,9 +366,9 @@
     if (ttsPending){ clearTimeout(ttsPending.timer); const r = ttsPending.resolve; ttsPending = null; r(); }
     try{ if (synth) synth.cancel(); }catch(e){}
   }
-  function speak(text, lang){
+  function speak(text, lang, force){
     return new Promise(res => {
-      if (!cfg.tts || !synth || (lang === 'ko' && !cfg.ttsKo)){ res(); return; }
+      if (!synth || (!force && (!cfg.tts || (lang === 'ko' && !cfg.ttsKo)))){ res(); return; }
       stopTts();
       try{
         const u = new SpeechSynthesisUtterance(text);
@@ -361,7 +377,7 @@
         u.rate = cfg.rate || 0.95;
         const fin = () => { if (ttsPending && ttsPending.resolve === res){ clearTimeout(ttsPending.timer); ttsPending = null; res(); } };
         u.onend = fin; u.onerror = fin;
-        ttsPending = { resolve: res, timer: setTimeout(() => { stopTts(); }, 20000) };
+        ttsPending = { resolve: res, timer: setTimeout(() => { stopTts(); }, Math.min(20000, 3000 + text.length * 120)) };
         synth.speak(u);
       }catch(e){ ttsPending = null; res(); }
     });
@@ -394,7 +410,13 @@
     const my = ++session;
     const r = new SR();
     r.lang = el[lang].srLang; r.interimResults = true; r.continuous = false; r.maxAlternatives = 3;
-    let finalText = '', interim = '', lastResultAt = 0; const alts = [];
+    // snapshot = latest full transcript (finals + interims rebuilt on every result).
+    // fastEnd: the engine's own end-of-speech can lag by seconds (esp. vi-VN), so after a speechend signal
+    // (+450ms grace) or endSilence ms without new results we stop() ourselves to get the final early.
+    let snapshot = '', lastResultAt = 0, speechEndAt = 0, forced = false, endTimer = null, maxTimer = null; const alts = [];
+    const fastEnd = cfg.fastEnd === 'both' || (cfg.fastEnd !== 'off' && lang === 'vi');
+    const forceStop = () => { if (my === session && rec === r){ forced = true; try{ r.stop(); }catch(e){} } };
+    const armEnd = ms => { clearTimeout(endTimer); endTimer = setTimeout(forceStop, ms); };
     r.onstart = () => {
       if (my !== session) return;
       listening = lang; rec = r;
@@ -402,17 +424,22 @@
       el[lang].mine.textContent = ''; el[lang].mine.classList.remove('skip'); el[lang].mine.classList.add('live');
       setStatus(lang === 'ko' ? '🎙 한국어 듣는 중' : '🎙 Đang nghe tiếng Việt');
     };
+    r.onspeechstart = () => { if (my === session) clearTimeout(endTimer); };
+    r.onspeechend = () => { if (my !== session) return; speechEndAt = performance.now(); if (fastEnd) armEnd(450); };
     r.onresult = e => {
       if (my !== session) return;
-      interim = ''; lastResultAt = performance.now();
-      for (let i = e.resultIndex; i < e.results.length; i++){
-        const t = e.results[i][0].transcript;
-        if (e.results[i].isFinal){
-          finalText += t;
-          for (let k = 1; k < e.results[i].length; k++){ const a = (e.results[i][k].transcript || '').trim(); if (a && a !== t.trim() && !alts.includes(a)) alts.push(a); }
-        } else interim += t;
+      lastResultAt = performance.now();
+      let fin = '', inter = '';
+      for (let i = 0; i < e.results.length; i++){
+        const res = e.results[i], t = res[0].transcript;
+        if (res.isFinal){
+          fin += t;
+          for (let k = 1; k < res.length; k++){ const a = (res[k].transcript || '').trim(); if (a && a !== t.trim() && !alts.includes(a)) alts.push(a); }
+        } else inter += t;
       }
-      el[lang].mine.textContent = (finalText + ' ' + interim).trim();
+      snapshot = (fin + ' ' + inter).trim();
+      el[lang].mine.textContent = snapshot;
+      if (fastEnd && snapshot) armEnd(speechEndAt ? 450 : (cfg.endSilence || 1200));
     };
     r.onerror = e => {
       if (my !== session) return;
@@ -425,17 +452,35 @@
     };
     r.onend = () => {
       if (my !== session) return;
-      const text = (finalText || interim).trim();
-      const recDelay = lastResultAt ? (performance.now() - lastResultAt) / 1000 : 0;
+      clearTimeout(endTimer); clearTimeout(maxTimer);
+      const now = performance.now();
+      const text = snapshot.trim();
+      const recDelay = lastResultAt ? (now - lastResultAt) / 1000 : 0;
+      lastTurn = `${lang === 'ko' ? '🇰🇷' : '🇻🇳'} 마지막 결과→종료 ${recDelay.toFixed(1)}s · 말끝 신호→종료 ${speechEndAt ? ((now - speechEndAt) / 1000).toFixed(1) + 's' : '신호 없음'} · ${forced ? '앱이 조기 종료' : '엔진이 종료'}`;
       stopListening();
       if (text) handleUtterance(lang, text, recDelay, alts.slice(0, 2));
       else { setStatus(lang === 'ko' ? '인식된 말이 없어요' : 'Không nhận được lời nói'); advance(lang, 'fail'); }
     };
-    try{ r.start(); }
+    try{ r.start(); maxTimer = setTimeout(forceStop, 25000); }
     catch(e){ stopListening(); setStatus('⏸ 마이크를 다시 켜지 못했어요 — 탭하여 계속', lang); }
   }
   el.ko.btn.onclick = () => { fails = 0; listening === 'ko' ? stopListening() : startListening('ko'); };
   el.vi.btn.onclick = () => { fails = 0; listening === 'vi' ? stopListening() : startListening('vi'); };
+
+  // ---------- replay the last translation shown on a side ----------
+  const lastSaid = { ko:'', vi:'' };
+  let replaying = false, replayToken = 0;
+  async function replay(lang){
+    if (busy || replaying || !lastSaid[lang]) return;
+    replaying = true; const token = ++replayToken; const was = listening;
+    stopListening(); setStatus(lang === 'vi' ? '🔊 Nghe lại' : '🔊 다시 듣기');
+    await speak(lastSaid[lang], lang, true);
+    replaying = false;
+    if (token !== replayToken) return;
+    if (cfg.autoAlt && was) startListening(was); else setStatus('준비됨 · ' + APP_VER);
+  }
+  el.ko.replay.onclick = () => replay('ko'); el.vi.replay.onclick = () => replay('vi');
+  el.ko.theirs.onclick = () => replay('ko'); el.vi.theirs.onclick = () => replay('vi');
 
   // ---------- prompts ----------
   function namesBlock(){
@@ -677,7 +722,8 @@ Examples (input → exact JSON output):
       return;
     }
 
-    el[to].theirs.classList.remove('dim'); el[to].theirs.textContent = r.t;
+    el[to].theirs.classList.remove('dim'); el[to].theirs.classList.toggle('long', r.t.length > 90); el[to].theirs.textContent = r.t;
+    lastSaid[to] = r.t; el[to].replay.classList.add('show');
     el[to].alt.textContent = r.alt ? r.alt : '';
     el[to].st.textContent = r.mainLabel ? '🔊 ' + r.mainLabel : '';
     el[lang].st.textContent = r.note ? '💬 ' + r.note : '';
