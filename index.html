@@ -209,7 +209,7 @@
 <script>
 (() => {
   const $ = id => document.getElementById(id);
-  const APP_VER = 'v12';
+  const APP_VER = 'v13';
   const LS = 'kvtalk.cfg.v1';
   const DEFAULT_NAMES = '봉, 봉아, 봉이, 봉화 = Bông\n보이, 보이야, 보위 = Bối\n수아, 수아야, 수화, 수야 = Sữa\n미아, 마야 = Mya';
   const cfg = Object.assign({ apiKey:'', model:'claude-haiku-5-5', engine:'claude', gemKey:'', gemModel:'gemini-2.5-flash', primary:'claude',
@@ -424,7 +424,7 @@
       el[lang].mine.textContent = ''; el[lang].mine.classList.remove('skip'); el[lang].mine.classList.add('live');
       setStatus(lang === 'ko' ? '🎙 한국어 듣는 중' : '🎙 Đang nghe tiếng Việt');
     };
-    r.onspeechstart = () => { if (my === session) clearTimeout(endTimer); };
+    r.onspeechstart = () => { if (my !== session) return; speechEndAt = 0; clearTimeout(endTimer); };
     r.onspeechend = () => { if (my !== session) return; speechEndAt = performance.now(); if (fastEnd) armEnd(450); };
     r.onresult = e => {
       if (my !== session) return;
