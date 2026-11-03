@@ -214,7 +214,7 @@
 <script>
 (() => {
   const $ = id => document.getElementById(id);
-  const APP_VER = 'v14';
+  const APP_VER = 'v15';
   const LS = 'kvtalk.cfg.v1';
   const DEFAULT_NAMES = '봉, 봉아, 봉이, 봉화 = Bông\n보이, 보이야, 보위 = Bối\n수아, 수아야, 수화, 수야 = Sữa\n미아, 마야 = Mya';
   const cfg = Object.assign({ apiKey:'', model:'claude-haiku-5-5', engine:'claude', gemKey:'', gemModel:'gemini-2.5-flash', primary:'claude',
@@ -843,7 +843,7 @@ Examples (input → exact JSON output):
     // Either way the hash is removed at once so the key never stays in the address bar or history.
     const m = location.hash.match(/^#import=([A-Za-z0-9_.-]+)(&auto=1)?$/);
     if (m){
-      history.replaceState(null, '', location.pathname + location.search);
+      window.history.replaceState(null, '', location.pathname + location.search);   // `history` is shadowed by the chat log above
       setTimeout(() => importCode(m[1], true, !!m[2]), 300);
     }
   }
